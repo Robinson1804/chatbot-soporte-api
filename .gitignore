@@ -1,0 +1,19 @@
+# Dependencies
+node_modules/
+
+# Environment secrets
+.env
+
+# Internal tool folders
+.atl/
+.claude/
+.playwright-mcp/
+
+# Test artifacts
+test-*.png
+test_*.docx
+test_out.pdf
+test-results/
+
+# Logs
+*.log
