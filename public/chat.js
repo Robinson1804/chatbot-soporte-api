@@ -121,7 +121,7 @@ async function sendMessage(text) {
       }
     }
 
-    const { cleanText, chips, docGenPayload, urgencia } = extractChips(fullText);
+    const { cleanText, chips, docGenPayload, urgencia, templatePayload } = extractChips(fullText);
     renderBubbleContent(bubbleEl, cleanText);
 
     if (urgencia) prependUrgencyBadge(bubbleEl, urgencia);
@@ -135,6 +135,10 @@ async function sendMessage(text) {
 
     if (docGenPayload && docGenPayload.tipo && docGenPayload.datos) {
       generateDocument(docGenPayload.tipo, docGenPayload.datos, rowEl);
+    }
+
+    if (templatePayload) {
+      downloadTemplate(templatePayload, rowEl);
     }
 
   } catch (err) {
@@ -327,13 +331,19 @@ function extractChips(text) {
   const urgenciaMatch = text.match(/\[URGENCIA:(P[1-4])\]/);
   if (urgenciaMatch) urgencia = urgenciaMatch[1];
 
+  // Extraer tag de plantilla en blanco
+  let templatePayload = null;
+  const templateMatch = text.match(/\[DESCARGAR_PLANTILLA:(ANEXO0[1-4])\]/);
+  if (templateMatch) templatePayload = templateMatch[1];
+
   const cleanText = text
     .replace(/\[CHIPS:[^\]]*\]/g, '')
     .replace(/\[GENERAR_DOCUMENTO:\{[\s\S]*?\}\]/g, '')
     .replace(/\[URGENCIA:P[1-4]\]/g, '')
+    .replace(/\[DESCARGAR_PLANTILLA:ANEXO0[1-4]\]/g, '')
     .trim();
 
-  return { cleanText, chips, docGenPayload, urgencia };
+  return { cleanText, chips, docGenPayload, urgencia, templatePayload };
 }
 
 /* ============================================================
@@ -466,6 +476,38 @@ function prependUrgencyBadge(bubbleEl, nivel) {
   badge.className = `urgency-badge ${cfg.cls}`;
   badge.textContent = cfg.label;
   bubbleEl.prepend(badge);
+}
+
+/* ============================================================
+   DESCARGA DE PLANTILLA EN BLANCO
+   ============================================================ */
+function downloadTemplate(tipo, triggerRow) {
+  const btnRow = document.createElement('div');
+  btnRow.className = 'doc-download-row';
+
+  const iconSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="16" height="16"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>`;
+  const tipoLabel = { ANEXO01: 'ANEXO 01', ANEXO02: 'ANEXO 02', ANEXO03: 'ANEXO 03', ANEXO04: 'ANEXO 04' }[tipo] || tipo;
+
+  const btn = document.createElement('a');
+  btn.className = 'doc-download-btn doc-download-btn--blank';
+  btn.href = `/api/template/${tipo}`;
+  btn.download = `${tipo}_plantilla_INEI.docx`;
+  btn.innerHTML = `${iconSvg} Descargar plantilla en blanco — ${tipoLabel} (.docx)`;
+
+  const note = document.createElement('p');
+  note.className = 'doc-note';
+  note.textContent = 'Plantilla oficial en blanco. Completá los datos manualmente y adjuntala firmada al SSI.';
+
+  btnRow.appendChild(btn);
+  btnRow.appendChild(note);
+
+  if (triggerRow && triggerRow.parentNode === messagesEl) {
+    triggerRow.insertAdjacentElement('afterend', btnRow);
+  } else {
+    messagesEl.appendChild(btnRow);
+  }
+
+  scrollToBottom();
 }
 
 /* ============================================================

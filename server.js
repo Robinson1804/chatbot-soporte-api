@@ -264,9 +264,43 @@ Cuando el usuario esté listo para registrar su solicitud, indicarle:
 Si el usuario tiene un problema urgente, si el chatbot no puede resolver
 su consulta, o si el usuario lo solicita, indicar:
 
-"Para atención directa puede comunicarse con la Mesa de Ayuda de la OTIN.
-Por favor registre igualmente su solicitud en el SSI para que quede
-documentada y pueda darse seguimiento."
+"Para atención directa, comunicarse con la Mesa de Ayuda de la OTIN:
+📧 soporte@inei.gob.pe
+📞 (01) 743 4949 / Anexo 9391
+Responsable: Santiago Iván García Montañez (Jefe Técnico de Informática)
+
+Por favor registre igualmente su solicitud en el SSI para documentación
+y seguimiento."
+
+## DIRECTORIO DE FUNCIONARIOS INEI (mayo 2026)
+
+Jefe del INEI:
+- Gaspar Humberto Morán Flores | Tel: (01) 743 4949 / Anexo 9202 | gaspar.moran@inei.gob.pe
+
+Sub Jefe de Estadística:
+- Peter José Abad Altamirano | Anexo 9211 | Peter.Abad@inei.gob.pe
+
+Secretario General:
+- Luis Francisco Vivanco Aldon | Anexo 9215 | Luis.Vivanco@inei.gob.pe
+
+Jefe Técnico de Informática (OTIN — responsable de soporte TI):
+- Santiago Iván García Montañez | Tel: (01) 743 4949 / Anexo 9391 | Santiago.Garcia@inei.gob.pe
+
+Jefe Técnico de Administración:
+- Juan Vera Aguilar | Anexo 9300 | juan.vera@inei.gob.pe
+
+Directores Técnicos (referenciar como firmantes según área del usuario):
+- José Luis Robles Franco — Director Nacional de Cuentas Nacionales | Anexo 9285
+- Lilia Hortencia Montoya Sánchez — Directora Técnica de Indicadores Económicos | Anexo 9275
+- Alexander Germán Diaz Inga — Jefe Técnico de Difusión | Anexo 9235
+- José Gabriel García-Godos Jara — Director Nacional de Censos y Encuestas | Anexo 9250
+- Arturo Jaime Arias Chumpitaz — Director Técnico de Demografía e Indicadores Sociales | Anexo 9280
+- Danitza Elsa Rojas Meza — Directora Técnica (e) de Planificación, Presupuesto y Coop. Técnica | Anexo 9270
+- Norma Herlinda Cerna Tolentino — Directora Técnica (e) de Asesoría Jurídica | Anexo 9225
+
+REGLA DE FIRMANTE: Para ANEXO 02 de Sede Central, el firmante habitual es el Jefe Técnico de Informática:
+Santiago Iván García Montañez. Cuando el usuario no sepa quién firma, sugerirle este nombre y pedirle
+confirmación. Para sedes regionales, preguntar por el Director Regional correspondiente.
 
 ## CLASIFICACIÓN DE URGENCIA
 
@@ -345,7 +379,11 @@ Ejemplos:
 
 ## GENERACIÓN AUTOMÁTICA DE DOCUMENTOS PRE-COMPLETADOS
 
-Cuando el usuario necesite un ANEXO 01, 02, 03 o 04, después de orientarlo, ofrécele generarlo pre-completado con sus datos. Usa el chip: [CHIPS: Sí, generar el documento pre-completado | No, solo necesito orientación]
+Cuando el usuario necesite un ANEXO 01, 02, 03 o 04, después de orientarlo, ofrécele estas opciones:
+[CHIPS: Generar documento pre-completado | Descargar plantilla en blanco | Solo necesito orientación]
+
+- "Generar documento pre-completado": recopilá los datos conversacionalmente y generá el documento con los datos del usuario (flujo normal con [GENERAR_DOCUMENTO:...]).
+- "Descargar plantilla en blanco": el usuario quiere el formulario vacío para completarlo a mano. Respondé brevemente explicando qué datos debe llenar, e incluí al final el tag: [DESCARGAR_PLANTILLA:ANEXOxx] (donde xx = 01, 02, 03 o 04 según corresponda). Ejemplo: [DESCARGAR_PLANTILLA:ANEXO02]
 
 Si acepta, recoge los datos CONVERSACIONALMENTE. Si el usuario proporciona varios datos en un mismo mensaje (ej: "me llamo Juan Pérez, soy Analista, trabajo en la sede Lima"), captúralos todos de una vez — no preguntes uno por uno lo que ya dijo. Solo preguntá lo que efectivamente falta. Cuando tengas TODOS los campos obligatorios, presenta un RESUMEN de confirmación y preguntá si están correctos.
 
@@ -397,7 +435,7 @@ CAMPOS OBLIGATORIOS PARA ANEXO 02:
 - perfilInternet: "1" | "2" | "3" (solo si servicios.internet es true)
 - justificacion: texto de justificación — usar el texto acordado con el usuario en la conversación; NO dejar vacío si solicitó internet
 - ipAsignada: IP del equipo (dejar "" si no la conoce)
-- nombreDirector: nombre del Director o Jefe que firmará (dejar "" si no lo conoce)
+- nombreDirector: nombre del Director o Jefe que firmará. Para Sede Central, sugerirle al usuario "Santiago Iván García Montañez" (Jefe Técnico de Informática - OTIN). Para sedes regionales, preguntar por el Director Regional. Dejar "" si el usuario no confirma.
 
 CAMPOS OBLIGATORIOS PARA ANEXO 03:
 - area: nombre del área solicitante
@@ -529,6 +567,22 @@ app.post('/api/generate', async (req, res) => {
     console.error('Error generando documento:', err.message);
     res.status(500).json({ error: 'No se pudo generar el documento. Por favor intente nuevamente.' });
   }
+});
+
+app.get('/api/template/:tipo', (req, res) => {
+  const { tipo } = req.params;
+  const allowed = ['ANEXO01', 'ANEXO02', 'ANEXO03', 'ANEXO04'];
+  if (!allowed.includes(tipo)) {
+    return res.status(404).json({ error: 'Tipo no válido.' });
+  }
+  const templatePath = path.join(__dirname, 'templates', `${tipo}_template.docx`);
+  const fs = require('fs');
+  if (!fs.existsSync(templatePath)) {
+    return res.status(404).json({ error: `Plantilla ${tipo} no disponible.` });
+  }
+  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+  res.setHeader('Content-Disposition', `attachment; filename="${tipo}_plantilla_INEI.docx"`);
+  res.sendFile(templatePath);
 });
 
 app.listen(PORT, () => {
