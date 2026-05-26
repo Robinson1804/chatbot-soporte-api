@@ -494,3 +494,22 @@ html, body {
 
   .status-text { display: none; }
 }
+
+/* ============================================================
+   BADGE DE URGENCIA
+   ============================================================ */
+.urgency-badge {
+  display: inline-block;
+  font-size: .68rem;
+  font-weight: 700;
+  letter-spacing: .04em;
+  padding: 3px 9px;
+  border-radius: 4px;
+  margin-bottom: 8px;
+  text-transform: uppercase;
+}
+
+.urgency-p1 { background: #FEE2E2; color: #991B1B; border: 1px solid #FECACA; }
+.urgency-p2 { background: #FEF3C7; color: #92400E; border: 1px solid #FDE68A; }
+.urgency-p3 { background: #EFF6FF; color: #1E40AF; border: 1px solid #BFDBFE; }
+.urgency-p4 { background: #F1F5F9; color: #475569; border: 1px solid #E2E8F0; }

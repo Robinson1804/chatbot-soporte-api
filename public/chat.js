@@ -27,6 +27,7 @@ const WELCOME_CHIPS = [
    INICIALIZACIÓN
    ============================================================ */
 document.addEventListener('DOMContentLoaded', () => {
+  loadHistory();
   showWelcome();
   userInput.focus();
 });
@@ -59,6 +60,7 @@ async function sendMessage(text) {
 
   appendUserMessage(text);
   history.push({ role: 'user', content: text });
+  saveHistory();
 
   removeChips();
   setStreaming(true);
@@ -119,10 +121,13 @@ async function sendMessage(text) {
       }
     }
 
-    const { cleanText, chips, docGenPayload } = extractChips(fullText);
+    const { cleanText, chips, docGenPayload, urgencia } = extractChips(fullText);
     renderBubbleContent(bubbleEl, cleanText);
 
+    if (urgencia) prependUrgencyBadge(bubbleEl, urgencia);
+
     history.push({ role: 'assistant', content: fullText });
+    saveHistory();
 
     if (chips.length > 0) {
       renderChips(chips, rowEl);
@@ -317,12 +322,18 @@ function extractChips(text) {
     }
   }
 
+  // Extraer tag de urgencia
+  let urgencia = null;
+  const urgenciaMatch = text.match(/\[URGENCIA:(P[1-4])\]/);
+  if (urgenciaMatch) urgencia = urgenciaMatch[1];
+
   const cleanText = text
     .replace(/\[CHIPS:[^\]]*\]/g, '')
     .replace(/\[GENERAR_DOCUMENTO:\{[\s\S]*?\}\]/g, '')
+    .replace(/\[URGENCIA:P[1-4]\]/g, '')
     .trim();
 
-  return { cleanText, chips, docGenPayload };
+  return { cleanText, chips, docGenPayload, urgencia };
 }
 
 /* ============================================================
@@ -416,6 +427,7 @@ resetBtn.addEventListener('click', resetConversation);
 
 function resetConversation() {
   history = [];
+  sessionStorage.removeItem('otin-history');
   messagesEl.innerHTML = '';
   fetch('/api/reset', { method: 'POST' }).catch(() => {});
   showWelcome();
@@ -435,4 +447,39 @@ function scrollToBottom() {
   requestAnimationFrame(() => {
     messagesEl.scrollTop = messagesEl.scrollHeight;
   });
+}
+
+/* ============================================================
+   BADGE DE URGENCIA
+   ============================================================ */
+const URGENCIA_CONFIG = {
+  P1: { label: 'CRÍTICO — P1', cls: 'urgency-p1' },
+  P2: { label: 'URGENTE — P2', cls: 'urgency-p2' },
+  P3: { label: 'NORMAL — P3',  cls: 'urgency-p3' },
+  P4: { label: 'BAJO — P4',    cls: 'urgency-p4' },
+};
+
+function prependUrgencyBadge(bubbleEl, nivel) {
+  const cfg = URGENCIA_CONFIG[nivel];
+  if (!cfg) return;
+  const badge = document.createElement('div');
+  badge.className = `urgency-badge ${cfg.cls}`;
+  badge.textContent = cfg.label;
+  bubbleEl.prepend(badge);
+}
+
+/* ============================================================
+   PERSISTENCIA DE SESIÓN (sessionStorage)
+   ============================================================ */
+function saveHistory() {
+  try {
+    sessionStorage.setItem('otin-history', JSON.stringify(history));
+  } catch {}
+}
+
+function loadHistory() {
+  try {
+    const saved = sessionStorage.getItem('otin-history');
+    if (saved) history = JSON.parse(saved);
+  } catch {}
 }
