@@ -123,6 +123,29 @@ Perfiles de internet disponibles:
 - Perfil 2 (Intermedio): internet + correo web, sin redes sociales ni streaming
 - Perfil 3 (Básico): solo sitios de gobierno, educación, noticias y búsqueda
 
+LÓGICA DE PERFIL Y JUSTIFICACIÓN (aplicar siempre al generar ANEXO 02):
+Cuando el usuario indique su cargo, determina automáticamente el perfil sugerido y genera la justificación:
+
+Perfil 1 — cargos que habitualmente necesitan redes sociales o comunicación externa:
+  Director, Jefe de Área, Coordinador, Especialista en Comunicaciones, Relacionista Público,
+  Responsable de Prensa, Community Manager, Marketing, Periodista, Documentalista, Jefe de Proyecto.
+  Justificación ejemplo: "En cumplimiento de mis funciones como [cargo] en [área/dependencia], requiero acceso completo a internet incluyendo redes sociales y plataformas de streaming para el monitoreo institucional, difusión de información estadística y coordinación con entidades externas."
+
+Perfil 2 — profesionales técnicos/analistas que no necesitan redes sociales:
+  Analista de Sistemas, Programador, Técnico de Soporte, Especialista TI, Analista Estadístico,
+  Investigador, Economista, Ingeniero, Profesional, Asistente Técnico, Consultor, Contador.
+  Justificación ejemplo: "En cumplimiento de mis funciones como [cargo] en [área/dependencia], requiero acceso a internet y correo web para consulta de documentación técnica, acceso a repositorios especializados y coordinación con equipos de trabajo, sin necesidad de redes sociales."
+
+Perfil 3 — personal administrativo y de apoyo:
+  Secretaria, Auxiliar, Personal Administrativo, Asistente Administrativo, Técnico Administrativo,
+  Chofer, Personal de Servicios, Recepcionista, Digitador.
+  Justificación ejemplo: "En cumplimiento de mis funciones como [cargo] en [área/dependencia], requiero acceso básico a internet para consulta de portales del Estado, normativas vigentes y trámites institucionales necesarios para el desarrollo de mis labores."
+
+INSTRUCCIÓN: Al recopilar el cargo del usuario para el ANEXO 02:
+1. Informale el perfil sugerido y proponé la justificación generada automáticamente.
+2. El usuario puede aceptarla o ajustarla.
+3. Cuando el usuario la acepte o ajuste, guardá ese texto exacto para incluirlo en el campo "justificacion" del JSON al generar el documento. NUNCA dejes "justificacion" vacío si el usuario solicitó internet.
+
 Firmas necesarias:
 - Firma del Director Técnico/Nacional o Funcionario Autorizado
 - Firma del usuario solicitante
@@ -258,7 +281,7 @@ Ejemplos:
 
 Cuando el usuario necesite un ANEXO 01, 02, 03 o 04, después de orientarlo, ofrécele generarlo pre-completado con sus datos. Usa el chip: [CHIPS: Sí, generar el documento pre-completado | No, solo necesito orientación]
 
-Si acepta, recoge los datos CONVERSACIONALMENTE (de a pocos campos por vez, de forma natural). Cuando tengas TODOS los campos obligatorios, presenta un RESUMEN de confirmación y pregunta si están correctos.
+Si acepta, recoge los datos CONVERSACIONALMENTE. Si el usuario proporciona varios datos en un mismo mensaje (ej: "me llamo Juan Pérez, soy Analista, trabajo en la sede Lima"), captúralos todos de una vez — no preguntes uno por uno lo que ya dijo. Solo preguntá lo que efectivamente falta. Cuando tengas TODOS los campos obligatorios, presenta un RESUMEN de confirmación y preguntá si están correctos.
 
 Si el usuario confirma, al FINAL de tu mensaje de confirmación incluye ESTE TAG EXACTO (el usuario no lo ve, solo el sistema lo procesa):
 
@@ -266,7 +289,7 @@ Para ANEXO 01:
 [GENERAR_DOCUMENTO:{"tipo":"ANEXO01","datos":{"nombres":"...","dni":"...","cargo":"...","direccion":"...","sede":"...","telefono":"...","correoInstitucional":"...","tipoContrato":"CAS","numeroOS":"","fechaInicio":"DD/MM/YYYY","fechaTermino":"DD/MM/YYYY","fechaSolicitud":"DD/MM/YYYY","tipoAcceso":"remoto","justificacionRemoto":"...","justificacionUSB":"","userRed":"...","correoPersonal":"...","hostEquipo":"..."}}]
 
 Para ANEXO 02:
-[GENERAR_DOCUMENTO:{"tipo":"ANEXO02","datos":{"nombres":"...","dni":"...","cargo":"...","direccion":"...","sede":"...","telefono":"...","correoInstitucional":"","tipoContrato":"CAS","numeroOS":"","fechaInicio":"DD/MM/YYYY","fechaTermino":"DD/MM/YYYY","fechaSolicitud":"DD/MM/YYYY","tipoSolicitud":"Creación","servicios":{"cuentaRed":false,"internet":true,"correo":true},"perfilInternet":"2","justificacion":""}}]
+[GENERAR_DOCUMENTO:{"tipo":"ANEXO02","datos":{"nombres":"...","dni":"...","cargo":"...","direccion":"...","sede":"...","telefono":"...","correoInstitucional":"...","ipAsignada":"","tipoContrato":"CAS","numeroOS":"","fechaInicio":"DD/MM/YYYY","fechaTermino":"DD/MM/YYYY","fechaSolicitud":"DD/MM/YYYY","tipoSolicitud":"Creación","servicios":{"cuentaRed":false,"internet":true,"correo":true},"perfilInternet":"2","justificacion":"...","nombreDirector":""}}]
 
 Para ANEXO 03:
 [GENERAR_DOCUMENTO:{"tipo":"ANEXO03","datos":{"area":"...","jefeArea":"...","usuarioSolicitante":"...","proposito":"...","fechaSolicitud":"DD/MM/YYYY","fechaTermino":"DD/MM/YYYY"}}]
@@ -298,6 +321,7 @@ CAMPOS OBLIGATORIOS PARA ANEXO 02:
 - direccion: dirección u oficina
 - sede: sede del INEI
 - telefono: teléfono o anexo
+- correoInstitucional: correo institucional del INEI (dejar vacío "" si aún no tiene)
 - tipoContrato: "NOMBRADO" | "CAS" | "LOCADOR-OS" | "OTROS"
 - numeroOS: número OS o string vacío
 - fechaInicio: DD/MM/YYYY
@@ -305,7 +329,9 @@ CAMPOS OBLIGATORIOS PARA ANEXO 02:
 - tipoSolicitud: "Creación" | "Actualización" | "Baja" | "Desactivación"
 - servicios: objeto JSON con {"cuentaRed": bool, "internet": bool, "correo": bool}
 - perfilInternet: "1" | "2" | "3" (solo si servicios.internet es true)
-- justificacion: texto de justificación para excepciones (puede ser string vacío)
+- justificacion: texto de justificación — usar el texto acordado con el usuario en la conversación; NO dejar vacío si solicitó internet
+- ipAsignada: IP del equipo (dejar "" si no la conoce)
+- nombreDirector: nombre del Director o Jefe que firmará (dejar "" si no lo conoce)
 
 CAMPOS OBLIGATORIOS PARA ANEXO 03:
 - area: nombre del área solicitante
@@ -396,8 +422,20 @@ app.post('/api/generate', async (req, res) => {
     return res.status(400).json({ error: 'Se requiere tipo y datos.' });
   }
 
+  const REQUIRED = {
+    ANEXO01: ['nombres', 'cargo', 'direccion', 'sede', 'tipoAcceso'],
+    ANEXO02: ['nombres', 'cargo', 'direccion', 'sede', 'tipoSolicitud'],
+    ANEXO03: ['area', 'jefeArea', 'usuarioSolicitante', 'proposito'],
+    ANEXO04: ['nombres', 'cargo', 'recurso', 'justificacion'],
+  };
+
+  const missing = (REQUIRED[tipo] || []).filter(f => !datos[f]);
+  if (missing.length) {
+    return res.status(400).json({ error: `Campos requeridos faltantes para ${tipo}: ${missing.join(', ')}` });
+  }
+
   try {
-    const safeName = (datos.nombres || 'usuario').replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_]/g, '').substring(0, 30);
+    const safeName = (datos.nombres || datos.area || 'usuario').replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_]/g, '').substring(0, 30);
     let docBuffer;
     let filename;
 

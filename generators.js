@@ -12,8 +12,10 @@
 const {
   Document, Packer, Paragraph, Table, TableRow, TableCell,
   TextRun, AlignmentType, BorderStyle, WidthType, PageBreak,
-  ShadingType, HeightRule, VerticalAlign
+  ShadingType, HeightRule, VerticalAlign, ImageRun, TableLayoutType
 } = require('docx');
+const fs   = require('fs');
+const path = require('path');
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CONSTANTES
@@ -22,7 +24,8 @@ const BLUE       = '1F3864'; // azul institucional (headers)
 const LIGHT_BLUE = 'BDD7EE'; // fondo celdas header
 const A2_BLUE    = '1565C0'; // azul datos usuario ANEXO 02
 
-const PAGE_MARGINS = { top: 720, bottom: 720, left: 900, right: 900 };
+const PAGE_MARGINS    = { top: 720, bottom: 720, left: 900, right: 900 };
+const A2_PAGE_MARGINS = { top: 426, bottom: 284, left: 1701, right: 1701 };
 
 // ─────────────────────────────────────────────────────────────────────────────
 // HELPERS BÁSICOS
@@ -389,60 +392,52 @@ function osBox(numeroOS) {
 }
 
 /**
- * Header oficial: 3 celdas — INEI (bold azul) | título INEI + subtítulo | ANEXO 02.
- * Bordes negros, width 100%.
+ * Header oficial ANEXO 02: logo INEI | título institucional | ANEXO 02.
+ * Bordes negros, width 100%. logoBuffer puede ser null (fallback texto).
  */
-function officialHeader() {
+function officialHeaderA2(logoBuffer) {
+  const logoChildren = logoBuffer
+    ? [new Paragraph({
+        alignment: AlignmentType.CENTER,
+        children: [new ImageRun({ data: logoBuffer, transformation: { width: 68, height: 47 }, type: 'png' })],
+      })]
+    : [new Paragraph({
+        alignment: AlignmentType.CENTER,
+        children: [new TextRun({ text: 'INEI', bold: true, color: A2_BLUE, size: 26 })],
+      })];
+
   return new Table({
     width: { size: 100, type: WidthType.PERCENTAGE },
     borders: thinBlackBorder(),
     rows: [
       new TableRow({
+        height: { value: 700, rule: HeightRule.ATLEAST },
         children: [
           new TableCell({
-            width: { size: 20, type: WidthType.PERCENTAGE },
+            width: { size: 18, type: WidthType.PERCENTAGE },
             verticalAlign: VerticalAlign.CENTER,
-            margins: { top: 80, bottom: 80, left: 100, right: 100 },
+            margins: { top: 40, bottom: 40, left: 60, right: 60 },
+            children: logoChildren,
+          }),
+          new TableCell({
+            width: { size: 64, type: WidthType.PERCENTAGE },
+            verticalAlign: VerticalAlign.CENTER,
+            margins: { top: 40, bottom: 40, left: 60, right: 60 },
             children: [
               new Paragraph({
                 alignment: AlignmentType.CENTER,
-                children: [new TextRun({ text: 'INEI', bold: true, color: A2_BLUE, size: 30 })],
+                children: [new TextRun({ text: 'INSTITUTO NACIONAL DE ESTADÍSTICA E INFORMÁTICA', bold: true, color: '1A2533', size: 18 })],
+              }),
+              new Paragraph({
+                alignment: AlignmentType.CENTER,
+                children: [new TextRun({ text: 'Formulario de solicitud de acceso a Servicios Informáticos', italics: true, color: '595959', size: 15 })],
               }),
             ],
           }),
           new TableCell({
-            width: { size: 60, type: WidthType.PERCENTAGE },
+            width: { size: 18, type: WidthType.PERCENTAGE },
             verticalAlign: VerticalAlign.CENTER,
-            margins: { top: 80, bottom: 80, left: 100, right: 100 },
-            children: [
-              new Paragraph({
-                alignment: AlignmentType.CENTER,
-                children: [
-                  new TextRun({
-                    text: 'Instituto Nacional de Estadística e Informática',
-                    bold: true,
-                    color: '1A2533',
-                    size: 18,
-                  }),
-                ],
-              }),
-              new Paragraph({
-                alignment: AlignmentType.CENTER,
-                children: [
-                  new TextRun({
-                    text: 'Oficina Técnica de Informática (OTIN) — Mesa de Ayuda',
-                    italics: true,
-                    color: '595959',
-                    size: 15,
-                  }),
-                ],
-              }),
-            ],
-          }),
-          new TableCell({
-            width: { size: 20, type: WidthType.PERCENTAGE },
-            verticalAlign: VerticalAlign.CENTER,
-            margins: { top: 80, bottom: 80, left: 100, right: 100 },
+            margins: { top: 40, bottom: 40, left: 60, right: 60 },
             children: [
               new Paragraph({
                 alignment: AlignmentType.CENTER,
@@ -487,7 +482,7 @@ function lineFieldTable(labelText, value) {
  * Debajo: Paragraph con helperText cursiva pequeño.
  * Retorna ARRAY [Table, Paragraph].
  */
-function signatureBoxA2(label, helperText, prefilledName, prefilledDate) {
+function signatureBoxA2(label, helperText, prefilledName, prefilledDate, boxHeight = 1800) {
   const innerChildren = [];
 
   if (prefilledName) {
@@ -526,7 +521,7 @@ function signatureBoxA2(label, helperText, prefilledName, prefilledDate) {
     borders: thinBlackBorder(),
     rows: [
       new TableRow({
-        height: { value: 1800, rule: HeightRule.ATLEAST },
+        height: { value: boxHeight, rule: HeightRule.ATLEAST },
         children: [
           new TableCell({
             width: { size: 100, type: WidthType.PERCENTAGE },
@@ -556,106 +551,95 @@ function signatureBoxA2(label, helperText, prefilledName, prefilledDate) {
  * Tabla de servicios: 5 filas
  *   título + A cuentaRed + B internet/correo + C perfiles hint + D redesSociales/buzon.
  */
+/**
+ * Tabla SERVICIOS — Una sola tabla con 11 columnas base y gridSpan,
+ * replicando la estructura exacta del template ANEXO02_template.docx (T6).
+ *
+ * Ancho útil A4 (márgenes 1701+1701): W = 8495 twips
+ * Grid 11 cols: [222, 834, 545, 708, 1261, 1559, 253, 368, 1815, 647, 283]
+ *
+ * Retorna una sola Table. Uso: children.push(serviciosTable(srv, pNum))
+ */
 function serviciosTable(srv, pNum) {
   srv = srv || {};
-  const fullCell = (children) =>
-    new TableCell({
-      width: { size: 100, type: WidthType.PERCENTAGE },
-      margins: { top: 50, bottom: 50, left: 120, right: 120 },
-      children,
-    });
+  const S = 16;
+  const W = 8495;
+  const G = [222, 834, 545, 708, 1261, 1559, 253, 368, 1815, 647, 283];
 
-  const rows = [];
+  const bl = { style: BorderStyle.SINGLE, size: 4, color: '000000' };
+  const borders = { top: bl, bottom: bl, left: bl, right: bl, insideH: bl, insideV: bl };
 
-  // Título
-  rows.push(
-    new TableRow({
-      children: [
-        new TableCell({
-          width: { size: 100, type: WidthType.PERCENTAGE },
-          shading: { type: ShadingType.CLEAR, fill: 'EFEFEF', color: 'auto' },
-          margins: { top: 50, bottom: 50, left: 120, right: 120 },
-          children: [new Paragraph({ children: [formText('SERVICIOS SOLICITADOS:', { bold: true })] })],
-        }),
-      ],
-    })
-  );
+  const conRedes = srv.redesSociales === true || pNum === '1';
+  const sinRedes = !!srv.internet && !conRedes;
 
-  // A — Cuenta de Red
-  rows.push(
-    new TableRow({
-      children: [
-        fullCell([
-          new Paragraph({
-            children: [cb(!!srv.cuentaRed), formText('A) Cuenta de Red (acceso a la red institucional y equipo).')],
-          }),
-        ]),
-      ],
-    })
-  );
+  const cell = (children, width, span) => new TableCell({
+    width: { size: width, type: WidthType.DXA },
+    verticalAlign: VerticalAlign.CENTER,
+    margins: { top: 28, bottom: 28, left: 60, right: 60 },
+    ...(span > 1 ? { columnSpan: span } : {}),
+    children,
+  });
 
-  // B — Internet / Correo
-  rows.push(
-    new TableRow({
-      children: [
-        fullCell([
-          new Paragraph({
-            children: [
-              cb(!!srv.internet),
-              formText('B) Acceso a Internet      '),
-              cb(!!srv.correo),
-              formText('Correo electrónico institucional'),
-            ],
-          }),
-        ]),
-      ],
-    })
-  );
-
-  // C — Perfiles (hint)
-  rows.push(
-    new TableRow({
-      children: [
-        fullCell([
-          new Paragraph({
-            children: [
-              formText('C) Perfil de Internet asignado: ', { bold: true }),
-              userText(srv.internet ? pNum : ''),
-              formText('   (ver detalle de perfiles en la página 2)', { italics: true, size: 16, color: '595959' }),
-            ],
-          }),
-        ]),
-      ],
-    })
-  );
-
-  // D — Redes sociales / buzón
-  rows.push(
-    new TableRow({
-      children: [
-        fullCell([
-          new Paragraph({
-            children: [
-              cb(srv.redesSociales === true),
-              formText('D) Acceso a redes sociales      '),
-              formText('Aumento de capacidad de buzón: '),
-              userText(srv.aumentoBuzon || ''),
-            ],
-          }),
-        ]),
-      ],
-    })
-  );
+  const empty = (width, span) => cell([new Paragraph({ children: [] })], width, span || 1);
+  const p = (...runs) => new Paragraph({ children: runs });
 
   return new Table({
-    width: { size: 100, type: WidthType.PERCENTAGE },
-    borders: thinBlackBorder(),
-    rows,
+    width: { size: W, type: WidthType.DXA },
+    layout: TableLayoutType.FIXED,
+    columnWidths: G,
+    borders,
+    rows: [
+      // ROW 1: Cuenta Red (span4) | ck (1) | Para usuario (span2) | valor (span4)
+      new TableRow({ children: [
+        cell([p(formText('Cuenta de usuario de red', { size: S }))],         G[0]+G[1]+G[2]+G[3], 4),
+        cell([p(cb(!!srv.cuentaRed))],                                        G[4],                1),
+        cell([p(formText('Para usuario genérico: ', { bold: true, size: S }))], G[5]+G[6],         2),
+        cell([p(userText(srv.usuarioGenerico || '', { size: S }))],           G[7]+G[8]+G[9]+G[10],4),
+      ]}),
+      // ROW 2: (indent) | Internet | ck | Perfil | Indicar+valor (span4) | Correo | ck | spacer
+      new TableRow({ children: [
+        empty(G[0]),
+        cell([p(formText('Internet', { size: S }))],                          G[1],  1),
+        cell([p(cb(!!srv.internet))],                                          G[2],  1),
+        cell([p(formText('Perfil', { bold: true, size: S }))],                G[3],  1),
+        cell([
+          p(formText('Indicar 1, 2 o 3', { italics: true, size: 13, color: '595959' })),
+          p(userText(srv.internet ? pNum : '', { size: S })),
+        ],                                                                     G[4]+G[5]+G[6]+G[7], 4),
+        cell([p(formText('Cuenta de Correo institucional', { size: S }))],    G[8],  1),
+        cell([p(cb(!!srv.correo))],                                            G[9],  1),
+        empty(G[10]),
+      ]}),
+      // ROW 3: (indent) | Para Perfil 1 (span7) | Aumento buzón | valor | spacer
+      new TableRow({ children: [
+        empty(G[0]),
+        cell([
+          p(formText('Para el Perfil 1 (Acceso a Internet Avanzado), especificar:', { size: S })),
+          p(userText(srv.perfil1Spec || '', { size: S })),
+        ],                                                                     G[1]+G[2]+G[3]+G[4]+G[5]+G[6]+G[7], 7),
+        cell([p(formText('Aumento de capacidad de buzón:', { size: S }))],    G[8],  1),
+        cell([p(userText(srv.aumentoBuzon || '', { size: S }))],              G[9],  1),
+        empty(G[10]),
+      ]}),
+      // ROW 4: (indent) | Con redes (span3) | ck | Sin redes | ck (span2) | nueva cap (span2) | spacer
+      new TableRow({ children: [
+        empty(G[0]),
+        cell([p(formText('Con redes sociales', { size: S }))],                G[1]+G[2]+G[3], 3),
+        cell([p(cb(conRedes))],                                                G[4],  1),
+        cell([p(formText('Sin redes sociales', { size: S }))],                G[5],  1),
+        cell([p(cb(sinRedes))],                                                G[6]+G[7], 2),
+        cell([p(
+          formText('Indicar nueva capacidad solicitada: ', { italics: true, size: 13, color: '595959' }),
+          userText(srv.nuevaCapacidad || '', { size: S }),
+        )],                                                                    G[8]+G[9], 2),
+        empty(G[10]),
+      ]}),
+    ],
   });
 }
 
 /** Caja de excepciones / justificación: 2 filas (título + cuerpo de altura mínima). */
-function excepcionesBox(justificacion) {
+function excepcionesBox(justificacion, minHeight = 900) {
   return new Table({
     width: { size: 100, type: WidthType.PERCENTAGE },
     borders: thinBlackBorder(),
@@ -665,15 +649,15 @@ function excepcionesBox(justificacion) {
           new TableCell({
             width: { size: 100, type: WidthType.PERCENTAGE },
             shading: { type: ShadingType.CLEAR, fill: 'EFEFEF', color: 'auto' },
-            margins: { top: 50, bottom: 50, left: 120, right: 120 },
+            margins: { top: 40, bottom: 40, left: 80, right: 80 },
             children: [
-              new Paragraph({ children: [formText('EXCEPCIONES / JUSTIFICACIÓN:', { bold: true })] }),
+              new Paragraph({ children: [formText('EXCEPCIONES: JUSTIFICACION DE EL/LA DIRECTOR/A O FUNCIONARIO AUTORIZADO QUE SOLICITA PERMISOS ESPECIALES', { bold: true })] }),
             ],
           }),
         ],
       }),
       new TableRow({
-        height: { value: 900, rule: HeightRule.ATLEAST },
+        height: { value: minHeight, rule: HeightRule.ATLEAST },
         children: [
           new TableCell({
             width: { size: 100, type: WidthType.PERCENTAGE },
@@ -787,361 +771,109 @@ async function generateAnexo01(d) {
 async function generateAnexo02(d) {
   if (d === null || d === undefined) throw new TypeError("generateAnexo02: argumento 'd' es requerido");
 
-  const srv = d.servicios ?? d.srv ?? {};
+  const PizZip        = require('pizzip');
+  const Docxtemplater = require('docxtemplater');
+
+  const srv  = d.servicios ?? d.srv ?? {};
   const pNum = String(d.perfilInternet || srv.perfilInternet || '');
-  const hoy = d.fechaSolicitud || new Date().toLocaleDateString('es-PE');
 
-  const correo = d.correoInstitucional || d.correo || '';
-  const oficina = d.direccion || d.oficina || '';
-  const sede = d.sede || '';
+  const templatePath = path.join(__dirname, 'templates', 'ANEXO02_template.docx');
+  const content      = fs.readFileSync(templatePath, 'binary');
+  const zip          = new PizZip(content);
 
-  const children = [];
+  // ── Pre-procesar el XML para fusionar runs fragmentados ──────────────────
+  // Word divide los placeholders {xxx} en múltiples <w:r> al editar.
+  // Hay 3 patrones de fragmentación en este template:
+  //
+  // Patrón B – '{' pegado al texto anterior en un run, nombre+'}' en el siguiente
+  //   Ejemplo: <w:t>Cargo / Función{</w:t></w:r><proofErr?><w:r><w:t>cargo}</w:t>
+  //   Fix: quitar el '{' del texto y pegar '{nombre}' al inicio del siguiente run
+  //
+  // Patrón C – tres runs separados: '{', 'nombre', '}'
+  //   Ejemplo: <w:t>{</w:t></w:r><proofErr?><w:r><w:t>nombre</w:t></w:r><proofErr?><w:r><w:t>}
+  //   Fix: colapsar los tres runs en '{nombre}' dentro del primer run
+  //
+  // Patrón A/D – placeholder ya completo en un único run, sin cambios
+  let docXml = zip.file('word/document.xml').asText();
 
-  // ── PÁGINA 1 ──────────────────────────────────────────────────────────────
-  children.push(officialHeader());
-  children.push(...spacer(1));
-
-  // Banda de instrucciones
-  children.push(
-    new Paragraph({
-      children: [
-        formText(
-          'Para solicitar la creación, actualización, baja o desactivación de servicios informáticos, el Director Técnico/Nacional o Funcionario Autorizado debe completar el presente formulario y enviarlo a la OTIN.',
-          { italics: true }
-        ),
-      ],
-    })
-  );
-  children.push(...spacer(1));
-
-  // Título de sección
-  children.push(
-    new Paragraph({
-      children: [
-        formText('DATOS DEL USUARIO A QUIEN SE LE BRINDARÁ ACCESO A LOS SERVICIOS INFORMÁTICOS:', { bold: true }),
-      ],
-    })
+  // Paso 1 – Patrón C: {</w:t></w:r> ... <w:t>nombre</w:t></w:r> ... <w:t>}
+  // La '{' está sola en un <w:t>, el nombre en el siguiente y '}' en el tercero.
+  // Entre runs puede haber <w:proofErr .../> (spell/gramCheck markers).
+  docXml = docXml.replace(
+    /<w:t(\s[^>]*)?>(\{)<\/w:t><\/w:r>(?:<w:proofErr[^/]*\/>)*<w:r(?:\s[^>]*)?>(?:<w:rPr>[\s\S]*?<\/w:rPr>)?<w:t(\s[^>]*)?>([a-zA-Z][a-zA-Z0-9_]*)<\/w:t><\/w:r>(?:<w:proofErr[^/]*\/>)*<w:r(?:\s[^>]*)?>(?:<w:rPr>[\s\S]*?<\/w:rPr>)?<w:t(\s[^>]*)?>\}<\/w:t>/g,
+    (_, a1, _brace, _a3, name, _a5) => `<w:t${a1 || ''}>{${name}}</w:t>`
   );
 
-  // Table 1×2: contrato | fechas
-  children.push(
-    new Table({
-      width: { size: 100, type: WidthType.PERCENTAGE },
-      borders: thinBlackBorder(),
-      rows: [
-        new TableRow({
-          children: [
-            new TableCell({
-              width: { size: 65, type: WidthType.PERCENTAGE },
-              margins: { top: 50, bottom: 50, left: 120, right: 120 },
-              children: [
-                new Paragraph({
-                  children: [
-                    formText('Condición laboral:  '),
-                    cb(d.tipoContrato === 'NOMBRADO'),
-                    formText('NOMBRADO  '),
-                    cb(d.tipoContrato === 'CAS'),
-                    formText('CAS  '),
-                    cb(d.tipoContrato === 'LOCADOR-OS'),
-                    formText('LOCADOR-OS  '),
-                    cb(d.tipoContrato === 'OTROS'),
-                    formText('OTROS'),
-                  ],
-                }),
-              ],
-            }),
-            new TableCell({
-              width: { size: 35, type: WidthType.PERCENTAGE },
-              margins: { top: 50, bottom: 50, left: 120, right: 120 },
-              children: [
-                new Paragraph({ children: [formText('Fecha Inicio: ', { bold: true }), userText(d.fechaInicio || '')] }),
-                new Paragraph({ children: [formText('Fecha Término: ', { bold: true }), userText(d.fechaTermino || '')] }),
-              ],
-            }),
-          ],
-        }),
-      ],
-    })
+  // Paso 2 – Patrón B: texto{</w:t></w:r> ... <w:t>nombre}
+  // La '{' está al final del texto del run anterior; 'nombre}' en el siguiente run.
+  docXml = docXml.replace(
+    /(\{)<\/w:t><\/w:r>(?:<w:proofErr[^/]*\/>)*<w:r(?:\s[^>]*)?>(?:<w:rPr>[\s\S]*?<\/w:rPr>)?<w:t(\s[^>]*)?>([a-zA-Z][a-zA-Z0-9_]*\})/g,
+    (_, _brace, a2, nameClose) => `</w:t></w:r><w:r><w:t${a2 || ''}>{${nameClose}`
   );
 
-  // Párrafo cursiva
-  children.push(
-    new Paragraph({
-      children: [formText('(Considerar que el personal debe tener contrato activo vigente)', { italics: true, size: 16, color: '595959' })],
-    })
-  );
-  children.push(...spacer(1));
-
-  // Nombres y Apellidos
-  children.push(lineFieldTable('Nombres y Apellidos: ', d.nombres || ''));
-
-  // Dirección/Oficina + Correo
-  children.push(
-    new Table({
-      width: { size: 100, type: WidthType.PERCENTAGE },
-      borders: (() => {
-        const b = { style: BorderStyle.SINGLE, size: 4, color: '000000' };
-        const none = { style: BorderStyle.NONE, size: 0, color: 'auto' };
-        return { top: none, bottom: b, left: none, right: none, insideH: none, insideV: none };
-      })(),
-      rows: [
-        new TableRow({
-          children: [
-            new TableCell({
-              width: { size: 100, type: WidthType.PERCENTAGE },
-              margins: { top: 50, bottom: 50, left: 40, right: 40 },
-              children: [
-                new Paragraph({
-                  children: [
-                    formText('Dirección/ Oficina: ', { bold: true }),
-                    userText(oficina),
-                    formText('   Correo electrónico institucional: ', { bold: true }),
-                    userText(correo),
-                  ],
-                }),
-              ],
-            }),
-          ],
-        }),
-      ],
-    })
+  // ── Paso 3: hacer dinámicos los checkboxes estáticos del template ──────────
+  // Condición laboral: ☐ NOMBRADO ☒ CAS ☐ LOCADOR/O.S. ☐ OTROS
+  docXml = docXml.replace(
+    '<w:t xml:space="preserve">☐ </w:t></w:r><w:proofErr w:type="gramStart"/><w:r><w:rPr><w:color w:val="1A2533"/><w:sz w:val="16"/><w:szCs w:val="16"/></w:rPr><w:t xml:space="preserve">NOMBRADO  </w:t></w:r><w:r><w:rPr><w:b/><w:bCs/><w:color w:val="1565C0"/></w:rPr><w:t>☒</w:t></w:r><w:proofErr w:type="gramEnd"/><w:r><w:rPr><w:b/><w:bCs/><w:color w:val="1565C0"/></w:rPr><w:t xml:space="preserve"> </w:t></w:r><w:r><w:rPr><w:color w:val="1A2533"/><w:sz w:val="16"/><w:szCs w:val="16"/></w:rPr><w:t xml:space="preserve">CAS  </w:t></w:r><w:r><w:rPr><w:color w:val="1A2533"/></w:rPr><w:t xml:space="preserve">☐ </w:t></w:r><w:r><w:rPr><w:color w:val="1A2533"/><w:sz w:val="16"/><w:szCs w:val="16"/></w:rPr><w:t xml:space="preserve">LOCADOR / O.S.  </w:t></w:r><w:r><w:rPr><w:color w:val="1A2533"/></w:rPr><w:t xml:space="preserve">☐ </w:t></w:r><w:r><w:rPr><w:color w:val="1A2533"/><w:sz w:val="16"/><w:szCs w:val="16"/></w:rPr><w:t>OTROS</w:t></w:r>',
+    '<w:t xml:space="preserve">{ckNombrado} </w:t></w:r><w:proofErr w:type="gramStart"/><w:r><w:rPr><w:color w:val="1A2533"/><w:sz w:val="16"/><w:szCs w:val="16"/></w:rPr><w:t xml:space="preserve">NOMBRADO  </w:t></w:r><w:r><w:rPr><w:b/><w:bCs/><w:color w:val="1565C0"/></w:rPr><w:t>{ckCas}</w:t></w:r><w:proofErr w:type="gramEnd"/><w:r><w:rPr><w:b/><w:bCs/><w:color w:val="1565C0"/></w:rPr><w:t xml:space="preserve"> </w:t></w:r><w:r><w:rPr><w:color w:val="1A2533"/><w:sz w:val="16"/><w:szCs w:val="16"/></w:rPr><w:t xml:space="preserve">CAS  </w:t></w:r><w:r><w:rPr><w:color w:val="1A2533"/></w:rPr><w:t xml:space="preserve">{ckLocador} </w:t></w:r><w:r><w:rPr><w:color w:val="1A2533"/><w:sz w:val="16"/><w:szCs w:val="16"/></w:rPr><w:t xml:space="preserve">LOCADOR / O.S.  </w:t></w:r><w:r><w:rPr><w:color w:val="1A2533"/></w:rPr><w:t xml:space="preserve">{ckOtros} </w:t></w:r><w:r><w:rPr><w:color w:val="1A2533"/><w:sz w:val="16"/><w:szCs w:val="16"/></w:rPr><w:t>OTROS</w:t></w:r>'
   );
 
-  // Cargo/Función + Teléfono + Sede
-  children.push(
-    new Table({
-      width: { size: 100, type: WidthType.PERCENTAGE },
-      borders: (() => {
-        const b = { style: BorderStyle.SINGLE, size: 4, color: '000000' };
-        const none = { style: BorderStyle.NONE, size: 0, color: 'auto' };
-        return { top: none, bottom: b, left: none, right: none, insideH: none, insideV: none };
-      })(),
-      rows: [
-        new TableRow({
-          children: [
-            new TableCell({
-              width: { size: 100, type: WidthType.PERCENTAGE },
-              margins: { top: 50, bottom: 50, left: 40, right: 40 },
-              children: [
-                new Paragraph({
-                  children: [
-                    formText('Cargo / Función: ', { bold: true }),
-                    userText(d.cargo || ''),
-                    formText('   Teléfono/Anexo: ', { bold: true }),
-                    userText(d.telefono || ''),
-                    formText('   Sede: ', { bold: true }),
-                    userText(sede),
-                  ],
-                }),
-              ],
-            }),
-          ],
-        }),
-      ],
-    })
-  );
-  children.push(...spacer(1));
-
-  // Table 1×4: DNI + OS
-  children.push(
-    new Table({
-      width: { size: 100, type: WidthType.PERCENTAGE },
-      borders: (() => {
-        const none = { style: BorderStyle.NONE, size: 0, color: 'auto' };
-        return { top: none, bottom: none, left: none, right: none, insideH: none, insideV: none };
-      })(),
-      rows: [
-        new TableRow({
-          children: [
-            new TableCell({
-              width: { size: 22, type: WidthType.PERCENTAGE },
-              verticalAlign: VerticalAlign.CENTER,
-              margins: { top: 50, bottom: 50, left: 40, right: 40 },
-              children: [new Paragraph({ children: [formText('Documento de Identidad:', { bold: true })] })],
-            }),
-            new TableCell({
-              width: { size: 28, type: WidthType.PERCENTAGE },
-              verticalAlign: VerticalAlign.CENTER,
-              margins: { top: 50, bottom: 50, left: 40, right: 40 },
-              children: [dniBoxes(d.dni)],
-            }),
-            new TableCell({
-              width: { size: 28, type: WidthType.PERCENTAGE },
-              verticalAlign: VerticalAlign.CENTER,
-              margins: { top: 50, bottom: 50, left: 40, right: 40 },
-              children: [new Paragraph({ children: [formText('Número Orden de Servicio:', { bold: true })] })],
-            }),
-            new TableCell({
-              width: { size: 22, type: WidthType.PERCENTAGE },
-              verticalAlign: VerticalAlign.CENTER,
-              margins: { top: 50, bottom: 50, left: 40, right: 40 },
-              children: [osBox(d.numeroOS)],
-            }),
-          ],
-        }),
-      ],
-    })
-  );
-  children.push(...spacer(1));
-
-  // Table 1×3: Tipo Solicitud | ¿Punto de Red? | IP asignada
-  children.push(
-    new Table({
-      width: { size: 100, type: WidthType.PERCENTAGE },
-      borders: thinBlackBorder(),
-      rows: [
-        new TableRow({
-          children: [
-            new TableCell({
-              width: { size: 50, type: WidthType.PERCENTAGE },
-              margins: { top: 50, bottom: 50, left: 120, right: 120 },
-              children: [
-                new Paragraph({ children: [formText('Tipo de Solicitud:', { bold: true })] }),
-                new Paragraph({
-                  children: [
-                    cb(d.tipoSolicitud === 'Creación'),
-                    formText('Creación  '),
-                    cb(d.tipoSolicitud === 'Actualización'),
-                    formText('Actualización'),
-                  ],
-                }),
-                new Paragraph({
-                  children: [
-                    cb(d.tipoSolicitud === 'Baja'),
-                    formText('Baja  '),
-                    cb(d.tipoSolicitud === 'Desactivación'),
-                    formText('Desactivación'),
-                  ],
-                }),
-              ],
-            }),
-            new TableCell({
-              width: { size: 25, type: WidthType.PERCENTAGE },
-              verticalAlign: VerticalAlign.CENTER,
-              margins: { top: 50, bottom: 50, left: 120, right: 120 },
-              children: [
-                new Paragraph({
-                  children: [
-                    formText('¿Punto de Red?  ', { bold: true }),
-                    cb(!!d.puntoDered),
-                    formText('SI  '),
-                    cb(!d.puntoDered),
-                    formText('NO'),
-                  ],
-                }),
-              ],
-            }),
-            new TableCell({
-              width: { size: 25, type: WidthType.PERCENTAGE },
-              verticalAlign: VerticalAlign.CENTER,
-              margins: { top: 50, bottom: 50, left: 120, right: 120 },
-              children: [
-                new Paragraph({
-                  children: [formText('IP asignada: ', { bold: true }), userText(d.ipAsignada || '')],
-                }),
-              ],
-            }),
-          ],
-        }),
-      ],
-    })
-  );
-  children.push(...spacer(1));
-
-  // Tabla de servicios
-  children.push(serviciosTable(srv, pNum));
-  children.push(...spacer(1));
-
-  // Excepciones / justificación
-  children.push(excepcionesBox(d.justificacion || ''));
-  children.push(...spacer(1));
-
-  // Firma del Director/a (página 1)
-  const firmaDir = signatureBoxA2(
-    'Firma y Sello del Director/a o Funcionario Autorizado',
-    '(Nombres Completos del Director/a o Funcionario Autorizado)',
-    d.nombreDirector || '',
-    ''
-  );
-  children.push(...firmaDir);
-
-  // ── PÁGINA 2 ──────────────────────────────────────────────────────────────
-  children.push(new Paragraph({ children: [new PageBreak()] }));
-  children.push(officialHeader());
-  children.push(...spacer(1));
-
-  children.push(
-    new Paragraph({
-      alignment: AlignmentType.CENTER,
-      children: [formText('COMPROMISO DEL USUARIO', { bold: true, size: 22, color: A2_BLUE })],
-    })
-  );
-  children.push(...spacer(1));
-
-  const compromisos = [
-    'El usuario se compromete a utilizar los servicios informáticos del INEI únicamente para fines institucionales.',
-    'El usuario es responsable de mantener la confidencialidad de su contraseña y cuenta de red.',
-    'El incumplimiento de las políticas de uso aceptable puede resultar en la suspensión inmediata de los servicios.',
-  ];
-  compromisos.forEach((txt) => {
-    children.push(
-      new Paragraph({
-        spacing: { after: 80 },
-        alignment: AlignmentType.JUSTIFIED,
-        children: [formText(txt)],
-      })
-    );
-  });
-  children.push(...spacer(1));
-
-  children.push(
-    new Paragraph({ children: [formText('PERFILES DE INTERNET:', { bold: true })] })
-  );
-  const perfiles = [
-    'Perfil 1 (Acceso a Internet Avanzado): Acceso a internet, redes sociales y streaming.',
-    'Perfil 2 (Acceso a Internet Intermedio): Acceso a internet y correo web, sin redes sociales ni streaming.',
-    'Perfil 3 (Acceso a Internet Básico): Solo sitios de gobierno, educación, noticias y búsqueda.',
-  ];
-  perfiles.forEach((txt) => {
-    children.push(
-      new Paragraph({
-        bullet: { level: 0 },
-        spacing: { after: 60 },
-        children: [formText(txt)],
-      })
-    );
-  });
-  children.push(...spacer(1));
-
-  // Firma del solicitante (página 2)
-  const firmaSol = signatureBoxA2(
-    'Firma Digital y/o Firma y Sello del solicitante',
-    '(Nombres Completos del Solicitante)',
-    d.nombres || '',
-    hoy
-  );
-  children.push(...firmaSol);
-  children.push(...spacer(1));
-
-  // Footer
-  children.push(
-    new Paragraph({
-      alignment: AlignmentType.CENTER,
-      children: [formText('ANEXO 02 — Mesa de Ayuda OTIN — INEI', { italics: true, size: 12, color: '9CA3AF' })],
-    })
+  // Tipo de solicitud: ☒ Creación ☐ Actualización ☐ Baja ☐ Desactivación
+  docXml = docXml.replace(
+    '<w:r><w:rPr><w:b/><w:bCs/><w:color w:val="1565C0"/></w:rPr><w:t xml:space="preserve">☒ </w:t></w:r><w:proofErr w:type="gramStart"/><w:r><w:rPr><w:color w:val="1A2533"/><w:sz w:val="16"/><w:szCs w:val="16"/></w:rPr><w:t xml:space="preserve">Creación  </w:t></w:r><w:r><w:rPr><w:color w:val="1A2533"/></w:rPr><w:t>☐</w:t></w:r><w:proofErr w:type="gramEnd"/><w:r><w:rPr><w:color w:val="1A2533"/></w:rPr><w:t xml:space="preserve"> </w:t></w:r><w:r><w:rPr><w:color w:val="1A2533"/><w:sz w:val="16"/><w:szCs w:val="16"/></w:rPr><w:t xml:space="preserve">Actualización  </w:t></w:r><w:r><w:rPr><w:color w:val="1A2533"/></w:rPr><w:t xml:space="preserve">☐ </w:t></w:r><w:r><w:rPr><w:color w:val="1A2533"/><w:sz w:val="16"/><w:szCs w:val="16"/></w:rPr><w:t xml:space="preserve">Baja  </w:t></w:r><w:r><w:rPr><w:color w:val="1A2533"/></w:rPr><w:t xml:space="preserve">☐ </w:t></w:r><w:r><w:rPr><w:color w:val="1A2533"/><w:sz w:val="16"/><w:szCs w:val="16"/></w:rPr><w:t>Desactivación</w:t></w:r>',
+    '<w:r><w:rPr><w:b/><w:bCs/><w:color w:val="1565C0"/></w:rPr><w:t xml:space="preserve">{ckCreacion} </w:t></w:r><w:proofErr w:type="gramStart"/><w:r><w:rPr><w:color w:val="1A2533"/><w:sz w:val="16"/><w:szCs w:val="16"/></w:rPr><w:t xml:space="preserve">Creación  </w:t></w:r><w:r><w:rPr><w:color w:val="1A2533"/></w:rPr><w:t>{ckActualizacion}</w:t></w:r><w:proofErr w:type="gramEnd"/><w:r><w:rPr><w:color w:val="1A2533"/></w:rPr><w:t xml:space="preserve"> </w:t></w:r><w:r><w:rPr><w:color w:val="1A2533"/><w:sz w:val="16"/><w:szCs w:val="16"/></w:rPr><w:t xml:space="preserve">Actualización  </w:t></w:r><w:r><w:rPr><w:color w:val="1A2533"/></w:rPr><w:t xml:space="preserve">{ckBaja} </w:t></w:r><w:r><w:rPr><w:color w:val="1A2533"/><w:sz w:val="16"/><w:szCs w:val="16"/></w:rPr><w:t xml:space="preserve">Baja  </w:t></w:r><w:r><w:rPr><w:color w:val="1A2533"/></w:rPr><w:t xml:space="preserve">{ckDesactivacion} </w:t></w:r><w:r><w:rPr><w:color w:val="1A2533"/><w:sz w:val="16"/><w:szCs w:val="16"/></w:rPr><w:t>Desactivación</w:t></w:r>'
   );
 
-  const doc = new Document({
-    styles: { default: { document: { run: { font: 'Calibri', size: 20 } } } },
-    sections: [
-      {
-        properties: { page: { margin: PAGE_MARGINS } },
-        children,
-      },
-    ],
+  // SÍ/NO (¿Existe punto de red?): ☐ SI ☒ NO
+  docXml = docXml.replace(
+    '<w:t xml:space="preserve">☐ </w:t></w:r><w:proofErr w:type="gramStart"/><w:r><w:rPr><w:color w:val="1A2533"/><w:sz w:val="16"/><w:szCs w:val="16"/></w:rPr><w:t xml:space="preserve">SI  </w:t></w:r><w:r><w:rPr><w:b/><w:bCs/><w:color w:val="1565C0"/></w:rPr><w:t>☒</w:t></w:r>',
+    '<w:t xml:space="preserve">{ckSi} </w:t></w:r><w:proofErr w:type="gramStart"/><w:r><w:rPr><w:color w:val="1A2533"/><w:sz w:val="16"/><w:szCs w:val="16"/></w:rPr><w:t xml:space="preserve">SI  </w:t></w:r><w:r><w:rPr><w:b/><w:bCs/><w:color w:val="1565C0"/></w:rPr><w:t>{ckNo}</w:t></w:r>'
+  );
+
+  zip.file('word/document.xml', docXml);
+
+  // ── Renderizar con docxtemplater ─────────────────────────────────────────
+  const doc = new Docxtemplater(zip, { paragraphLoop: true, linebreaks: true });
+
+  const ck  = (v) => v ? '☒' : '☐';
+  const tc  = (d.tipoContrato || '').toUpperCase().replace(/[^A-Z\-]/g, '');
+  const ts  = d.tipoSolicitud || '';
+
+  doc.render({
+    nombres:          d.nombres             || '',
+    cargo:            d.cargo               || '',
+    oficina:          d.direccion || d.oficina || '',
+    correo:           d.correoInstitucional || d.correo || '',
+    sede:             d.sede                || '',
+    telefono:         d.telefono            || '',
+    ipAsignada:       d.ipAsignada          || '',
+    perfilInternet:   pNum,
+    capacidadBuzon:   srv.aumentoBuzon      || '',
+    justificacion:    d.justificacion       || '',
+    nombreDirector:   d.nombreDirector      || '',
+    nombreGenerico:   srv.usuarioGenerico   || '',
+    // Condición laboral
+    ckNombrado:       ck(tc === 'NOMBRADO'),
+    ckCas:            ck(tc === 'CAS'),
+    ckLocador:        ck(tc === 'LOCADOROS' || tc === 'LOCADOR-OS'),
+    ckOtros:          ck(tc === 'OTROS'),
+    // Tipo de solicitud
+    ckCreacion:       ck(ts === 'Creación'),
+    ckActualizacion:  ck(ts === 'Actualización'),
+    ckBaja:           ck(ts === 'Baja'),
+    ckDesactivacion:  ck(ts === 'Desactivación'),
+    // SÍ/NO punto de red (default: NO)
+    ckSi:             '☐',
+    ckNo:             '☒',
+    // Servicios
+    ckCuentaRed:      ck(srv.cuentaRed),
+    ckInternet:       ck(srv.internet),
+    ckCorreoInst:     ck(srv.correo),
+    ckConRedes:       ck(pNum === '1' || srv.redesSociales),
+    ckSinRedes:       ck(srv.internet && pNum !== '1' && !srv.redesSociales),
   });
 
-  return Packer.toBuffer(doc);
+  return doc.getZip().generate({ type: 'nodebuffer' });
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
