@@ -278,6 +278,8 @@ function simpleMarkdown(text) {
 
   /* Listas con guión o asterisco */
   html = html.replace(/^[-*] (.+)$/gm, '<li>$1</li>');
+  /* Colapsar líneas en blanco entre items para que queden en un solo <ul> */
+  html = html.replace(/(<\/li>)\n\n(<li>)/g, '$1\n$2');
   html = html.replace(/(<li>.*<\/li>(\n|$))+/g, (match) => `<ul>${match}</ul>`);
 
   /* Listas numeradas */

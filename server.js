@@ -580,9 +580,31 @@ app.get('/api/template/:tipo', (req, res) => {
   if (!fs.existsSync(templatePath)) {
     return res.status(404).json({ error: `Plantilla ${tipo} no disponible.` });
   }
-  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
-  res.setHeader('Content-Disposition', `attachment; filename="${tipo}_plantilla_INEI.docx"`);
-  res.sendFile(templatePath);
+
+  // Entregar plantilla limpia: reemplazar todos los {placeholders} con vacío
+  // para que el usuario vea el formulario sin texto de variables
+  try {
+    const PizZip = require('pizzip');
+    const Docxtemplater = require('docxtemplater');
+    const content = fs.readFileSync(templatePath, 'binary');
+    const zip = new PizZip(content);
+    const doc = new Docxtemplater(zip, {
+      paragraphLoop: true,
+      linebreaks: true,
+      nullGetter: () => '',
+    });
+    doc.render({});
+    const buffer = doc.getZip().generate({ type: 'nodebuffer' });
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+    res.setHeader('Content-Disposition', `attachment; filename="${tipo}_plantilla_INEI.docx"`);
+    res.setHeader('Content-Length', buffer.length);
+    res.send(buffer);
+  } catch {
+    // Fallback: servir el archivo crudo si docxtemplater falla
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+    res.setHeader('Content-Disposition', `attachment; filename="${tipo}_plantilla_INEI.docx"`);
+    res.sendFile(templatePath);
+  }
 });
 
 app.listen(PORT, () => {

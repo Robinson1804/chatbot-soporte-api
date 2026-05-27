@@ -833,7 +833,11 @@ async function generateAnexo02(d) {
   zip.file('word/document.xml', docXml);
 
   // ── Renderizar con docxtemplater ─────────────────────────────────────────
-  const doc = new Docxtemplater(zip, { paragraphLoop: true, linebreaks: true });
+  const doc = new Docxtemplater(zip, {
+    paragraphLoop: true,
+    linebreaks: true,
+    nullGetter: () => '',
+  });
 
   const ck  = (v) => v ? '☒' : '☐';
   const tc  = (d.tipoContrato || '').toUpperCase().replace(/[^A-Z\-]/g, '');
@@ -846,6 +850,10 @@ async function generateAnexo02(d) {
     correo:           d.correoInstitucional || d.correo || '',
     sede:             d.sede                || '',
     telefono:         d.telefono            || '',
+    dni:              d.dni                 || '',
+    numeroOS:         d.numeroOS            || '',
+    fechaInicio:      d.fechaInicio         || '',
+    fechaTermino:     d.fechaTermino        || '',
     ipAsignada:       d.ipAsignada          || '',
     perfilInternet:   pNum,
     capacidadBuzon:   srv.aumentoBuzon      || '',
@@ -854,7 +862,7 @@ async function generateAnexo02(d) {
     nombreGenerico:   srv.usuarioGenerico   || '',
     // Condición laboral
     ckNombrado:       ck(tc === 'NOMBRADO'),
-    ckCas:            ck(tc === 'CAS'),
+    ckCAS:            ck(tc === 'CAS'),
     ckLocador:        ck(tc === 'LOCADOROS' || tc === 'LOCADOR-OS'),
     ckOtros:          ck(tc === 'OTROS'),
     // Tipo de solicitud
