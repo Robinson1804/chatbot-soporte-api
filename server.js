@@ -478,27 +478,30 @@ Si el usuario acepta la creación automática, asegurate de tener:
 Luego incluí al FINAL de tu mensaje el tag (invisible para el usuario):
 [CREAR_TICKET_SSI:{"titulo":"...","descripcion":"...","categoria":"nombre exacto de la categoría SSI","sede":"Sede Central"}]
 
-CATEGORÍAS SSI MÁS COMUNES:
-- Configuración De Laptop
-- Configuración del Equipo de Computo (Especificar)
-- Acceso Remoto
-- Apoyo en la configuración de VPN y escritorio remoto
-- Problemas con internet
-- Problemas con el Correo
-- Instalación de Software
-- Desbloqueo de cuenta de red
-- Desbloqueo de cuenta de correo
-- Desbloqueo de cuenta de intranet
-- Reseteo de Contraseña
-- Configuración de Impresora
-- Problemas de impresión
-- Otros
+CATEGORÍAS SSI — LISTADO COMPLETO (usar el texto EXACTO en el tag):
+Equipos: Configuración De Laptop | Configuración Del Equipo de Computo (Especificar) | Conexión del Equipo de Computo (Especificar) | Mantenimiento Preventivo de Equipo de Computo | Cambio de Equipo Informático
+Red/Internet: Problemas con internet | Problemas de red | Problemas con Punto de Red | Verificación de punto de red | Problemas Switch | Problemas con IP | Servicio de asignación de IP | Incidentes de red solucionados
+VPN/Acceso: Acceso Remoto | Apoyo Remoto | Problema de conexión VPN o escritorio remoto | Apoyo en la configuración de VPN y escritorio remoto | Capacitación en el uso de la VPN y escritorio remoto
+Cuentas/Contraseñas: Reseteo de Contraseña | Desbloqueo de cuenta de red | Desbloqueo de cuenta de correo | Desbloqueo de cuenta de intranet | Activación de cuenta de usuario de red | Activación de cuenta de usuario de correo | Activación de cuenta de usuario de intranet | Creación de Cuenta de usuario de red | Creación de cuenta de usuario de correo | Creación de cuenta de usuario Intranet
+Correo: Problema de correo | Problemas con el Correo | Configuración de cuenta de correo
+Impresoras: Configuración de Impresora | Instalación de Impresora | Problemas de impresión | Impresiones y copias manchadas. | Impresiones atascadas. | Impresora sale error. | impresora necesita cambio de tóner.
+Software: Instalación de Software | Instalación de Microsoft Office | Instalación de sistema operativo | Instalación de SIAF | Instalación de SIGA | Instalación de SPSS | Instalación de STATA | Instalación de ArcGIS | Instalación de Firma Digital | Instalación de antivirus institucional PC
+Windows/Sistema: Problemas con Windows | Problemas con aplicaciones | Ataque de Virus | Problemas con el Correo | Problemas con Microsoft Office
+SGD/SSI: Problemas con el SGD | Reseteo de contraseña del SGD | Reseteo de contraseña del SSI | Creación de Usuario SSI
+Videoconferencia: Videoconferencia con Zoom | Videoconferencia con Webex | Videoconferencia con Skype | Apoyo en Videoconferencia
+Otros: Permisos a solicitudes a IP | Permiso a carpetas especiales | Solicitud de Backup de archivos | Restauración de información | Recuperación de archivos | Realización de Inventario | Otros
+
+SEDES SSI DISPONIBLES (usar el nombre EXACTO):
+Lima: Sede Central | Sede Ribeyro | Sede Marquez | Sede Salesiano | Sede Cervantes | Sede Marina | Sede Maria Plaza | Sede Miraflores | ENEI | ODEI | Sede Pedro Ruiz Gallo | POLYSISTEMAS | Sede DNCN
+Regiones: Amazonas | Apurimac | Arequipa | Ayacucho | Cajamarca | Chimbote | Cusco | Huacho | Huancavelica | Huanuco | Huaraz | Ica | Junin | La Libertad | Lambayeque | Loreto | Madre de Dios | Moquegua | Moyobamba | Pasco | Piura | Puno | Tacna | Tarapoto | Tumbes | Ucayali
+Internacional: BRASIL | Sede Iquique | Sede Arica | Sede Recuay | Sede Rep Chile
 
 REGLAS PARA [CREAR_TICKET_SSI]:
 1. Solo incluir este tag cuando el usuario explícitamente aceptó la creación automática.
 2. El JSON debe ser válido y en una sola línea.
 3. Siempre confirmar los datos antes de incluir el tag.
-4. Para solicitudes que requieren Anexo previo (GESTIÓN DE CUENTAS), NO crear ticket automático — el Anexo debe adjuntarse. Orientar primero a generar el Anexo.`;
+4. El campo "sede" debe ser exactamente uno de los nombres listados arriba.
+5. Para solicitudes que requieren Anexo previo (GESTIÓN DE CUENTAS), NO crear ticket automático — el Anexo debe adjuntarse. Orientar primero a generar el Anexo.`;
 
 app.use(cors());
 app.use(express.json());
