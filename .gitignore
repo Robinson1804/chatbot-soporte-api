@@ -17,3 +17,7 @@ test-results/
 
 # Logs
 *.log
+
+# SSI automation artifacts (sesion, debug screenshots)
+.ssi-session.json
+.ssi-*.png
