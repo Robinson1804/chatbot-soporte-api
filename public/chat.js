@@ -121,7 +121,7 @@ async function sendMessage(text) {
       }
     }
 
-    const { cleanText, chips, docGenPayload, urgencia, templatePayload } = extractChips(fullText);
+    const { cleanText, chips, docGenPayload, urgencia, templatePayload, ticketSSIPayload } = extractChips(fullText);
     renderBubbleContent(bubbleEl, cleanText);
 
     if (urgencia) prependUrgencyBadge(bubbleEl, urgencia);
@@ -139,6 +139,10 @@ async function sendMessage(text) {
 
     if (templatePayload) {
       downloadTemplate(templatePayload, rowEl);
+    }
+
+    if (ticketSSIPayload) {
+      crearTicketSSIDesdeChat(ticketSSIPayload, rowEl);
     }
 
   } catch (err) {
@@ -338,14 +342,26 @@ function extractChips(text) {
   const templateMatch = text.match(/\[DESCARGAR_PLANTILLA:(ANEXO0[1-4])\]/);
   if (templateMatch) templatePayload = templateMatch[1];
 
+  // Extraer tag de creación de ticket SSI
+  let ticketSSIPayload = null;
+  const ticketMatch = text.match(/\[CREAR_TICKET_SSI:(\{[\s\S]*?\})\]/);
+  if (ticketMatch) {
+    try {
+      ticketSSIPayload = JSON.parse(ticketMatch[1]);
+    } catch (e) {
+      console.warn('Tag CREAR_TICKET_SSI con JSON inválido:', ticketMatch[1]);
+    }
+  }
+
   const cleanText = text
     .replace(/\[CHIPS:[^\]]*\]/g, '')
     .replace(/\[GENERAR_DOCUMENTO:\{[\s\S]*?\}\]/g, '')
     .replace(/\[URGENCIA:P[1-4]\]/g, '')
     .replace(/\[DESCARGAR_PLANTILLA:ANEXO0[1-4]\]/g, '')
+    .replace(/\[CREAR_TICKET_SSI:\{[\s\S]*?\}\]/g, '')
     .trim();
 
-  return { cleanText, chips, docGenPayload, urgencia, templatePayload };
+  return { cleanText, chips, docGenPayload, urgencia, templatePayload, ticketSSIPayload };
 }
 
 /* ============================================================
@@ -510,6 +526,60 @@ function downloadTemplate(tipo, triggerRow) {
   }
 
   scrollToBottom();
+}
+
+/* ============================================================
+   CREACIÓN DE TICKET SSI AUTOMÁTICO
+   ============================================================ */
+async function crearTicketSSIDesdeChat(payload, triggerRow) {
+  const btnRow = document.createElement('div');
+  btnRow.className = 'doc-download-row';
+
+  const statusEl = document.createElement('p');
+  statusEl.className = 'doc-note';
+  statusEl.textContent = '⏳ Creando ticket en el SSI…';
+  btnRow.appendChild(statusEl);
+
+  if (triggerRow && triggerRow.parentNode === messagesEl) {
+    triggerRow.insertAdjacentElement('afterend', btnRow);
+  } else {
+    messagesEl.appendChild(btnRow);
+  }
+  scrollToBottom();
+
+  try {
+    const res = await fetch('/api/ticket-ssi', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+
+    if (!res.ok || !data.ok) {
+      statusEl.textContent = `❌ No se pudo crear el ticket: ${data.error || 'Error desconocido'}`;
+      return;
+    }
+
+    btnRow.innerHTML = '';
+    const iconSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="16" height="16"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>`;
+    const tag = document.createElement('span');
+    tag.className = 'doc-download-btn';
+    tag.style.cursor = 'default';
+    tag.innerHTML = `${iconSvg} ${data.mensaje}`;
+    btnRow.appendChild(tag);
+
+    const note = document.createElement('p');
+    note.className = 'doc-note';
+    note.textContent = 'Podés hacer seguimiento en webapp.inei.gob.pe/ssi';
+    btnRow.appendChild(note);
+
+    // Informar al historial
+    history.push({ role: 'assistant', content: data.mensaje });
+    saveHistory();
+    scrollToBottom();
+  } catch (err) {
+    statusEl.textContent = `❌ Error de conexión al crear el ticket: ${err.message}`;
+  }
 }
 
 /* ============================================================

@@ -4,6 +4,7 @@ const cors = require('cors');
 const path = require('path');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 const { generateAnexo01, generateAnexo02, generateAnexo03, generateAnexo04 } = require('./generators');
+const { crearTicketSSI } = require('./ssi-automation');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -460,7 +461,44 @@ REGLAS IMPORTANTES:
 2. El JSON dentro del tag debe ser válido — sin saltos de línea, sin caracteres no escapados.
 3. La fecha de solicitud usa la fecha actual si el usuario no la menciona.
 4. Si el usuario solo quiere orientación sin generar el documento, NO incluyas el tag.
-5. Ofrece la generación para los 4 ANEXOS (01, 02, 03 y 04).`;
+5. Ofrece la generación para los 4 ANEXOS (01, 02, 03 y 04).
+
+## CREACIÓN AUTOMÁTICA DE TICKET EN SSI
+
+Cuando el usuario ya completó el triaje y está listo para registrar su solicitud en el SSI, podés ofrecerle crear el ticket directamente por él (sin que tenga que entrar al SSI).
+
+[CHIPS: Crear ticket automáticamente | Prefiero crearlo yo mismo]
+
+Si el usuario acepta la creación automática, asegurate de tener:
+- Título descriptivo de la solicitud (máx 100 caracteres)
+- Descripción completa del problema o solicitud
+- Categoría SSI más apropiada (ver listado de categorías abajo)
+- Sede del usuario
+
+Luego incluí al FINAL de tu mensaje el tag (invisible para el usuario):
+[CREAR_TICKET_SSI:{"titulo":"...","descripcion":"...","categoria":"nombre exacto de la categoría SSI","sede":"Sede Central"}]
+
+CATEGORÍAS SSI MÁS COMUNES:
+- Configuración De Laptop
+- Configuración del Equipo de Computo (Especificar)
+- Acceso Remoto
+- Apoyo en la configuración de VPN y escritorio remoto
+- Problemas con internet
+- Problemas con el Correo
+- Instalación de Software
+- Desbloqueo de cuenta de red
+- Desbloqueo de cuenta de correo
+- Desbloqueo de cuenta de intranet
+- Reseteo de Contraseña
+- Configuración de Impresora
+- Problemas de impresión
+- Otros
+
+REGLAS PARA [CREAR_TICKET_SSI]:
+1. Solo incluir este tag cuando el usuario explícitamente aceptó la creación automática.
+2. El JSON debe ser válido y en una sola línea.
+3. Siempre confirmar los datos antes de incluir el tag.
+4. Para solicitudes que requieren Anexo previo (GESTIÓN DE CUENTAS), NO crear ticket automático — el Anexo debe adjuntarse. Orientar primero a generar el Anexo.`;
 
 app.use(cors());
 app.use(express.json());
@@ -604,6 +642,22 @@ app.get('/api/template/:tipo', (req, res) => {
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
     res.setHeader('Content-Disposition', `attachment; filename="${tipo}_plantilla_INEI.docx"`);
     res.sendFile(templatePath);
+  }
+});
+
+app.post('/api/ticket-ssi', async (req, res) => {
+  const { titulo, descripcion, categoria, sede, categoriaId, sedeId } = req.body;
+
+  if (!titulo || !descripcion) {
+    return res.status(400).json({ error: 'Se requieren titulo y descripcion.' });
+  }
+
+  try {
+    const resultado = await crearTicketSSI({ titulo, descripcion, categoria, categoriaId, sede, sedeId });
+    res.json(resultado);
+  } catch (err) {
+    console.error('Error SSI automation:', err.message);
+    res.status(500).json({ error: err.message || 'No se pudo crear el ticket en el SSI.' });
   }
 });
 
