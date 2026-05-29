@@ -209,6 +209,7 @@ async function login(page, ctx) {
 async function crearTicketSSI({ categoria, categoriaId, sede, sedeId, titulo, descripcion }) {
   const browser = await chromium.launch({
     headless: false, // headful para evitar detección de proxy INEI
+    slowMo: 300,     // necesario para que jQuery UI procese los eventos del dropdown
     args: ['--disable-blink-features=AutomationControlled', '--start-maximized'],
   });
 
@@ -243,50 +244,140 @@ async function crearTicketSSI({ categoria, categoriaId, sede, sedeId, titulo, de
     const categoriaTexto = resolveCategoria(categoria);
     const sId            = sedeId || resolveSede(sede);
 
-    // Rellenar formulario
-    // - #categorias: input con jQuery UI autocomplete (texto)
-    // - #sedes: SELECT oculto por Select2 (valor numérico)
-    await page.evaluate(({ catText, sId }) => {
-      const catInput = document.getElementById('categorias');
-      if (catInput) {
-        catInput.value = catText;
-        catInput.dispatchEvent(new Event('input',  { bubbles: true }));
-        catInput.dispatchEvent(new Event('change', { bubbles: true }));
-        if (window.jQuery) window.jQuery(catInput).trigger('change');
-      }
-      const selSede = document.getElementById('sedes');
-      if (selSede) {
-        selSede.value = String(sId);
-        selSede.dispatchEvent(new Event('change', { bubbles: true }));
-        if (window.jQuery) window.jQuery(selSede).trigger('change');
-      }
-    }, { catText: categoriaTexto, sId });
+    // Esperar que jQuery UI combobox esté inicializado antes de interactuar
+    await page.waitForSelector('input.custom-combobox-input', { state: 'visible', timeout: 15000 });
+    await page.waitForTimeout(2000);
 
+    // ── Sede: SELECT oculto por Select2 — funciona con evaluate ──────────
+    await page.evaluate((sId) => {
+      const sel = document.getElementById('sedes');
+      if (sel) {
+        sel.value = String(sId);
+        sel.dispatchEvent(new Event('change', { bubbles: true }));
+        if (window.jQuery) window.jQuery(sel).trigger('change');
+      }
+    }, sId);
+
+    // ── Esperar que #categorias tenga opciones (carga async tras seleccionar sede) ─
+    await page.waitForFunction(() => {
+      const sel = document.getElementById('categorias');
+      return sel && sel.options.length > 5;
+    }, null, { timeout: 10000 });
+
+    // ── Categoría via toggle + clic en ítem del dropdown ─────────────────
+    // page.selectOption() y evaluate NO actualizan el estado interno de jQuery UI.
+    // El SSI valida desde ese estado interno — si no coincide, el submit falla con HTTP 500.
+    // toggle+click es el único approach confirmado funcional (ticket #112628 creado con test-ssi-solo.js).
+    await page.bringToFront();
+    const toggleBtn = page.locator('.custom-combobox-toggle').first();
+    await toggleBtn.click();
+    await page.waitForTimeout(1500);
+
+    const items = page.locator('.ui-autocomplete li.ui-menu-item');
+    const allItems = await items.all();
+    console.log('[SSI] Items en dropdown:', allItems.length, '| Buscando:', categoriaTexto);
+    let categoriaClickeada = false;
+    const catLower = categoriaTexto.toLowerCase();
+    // Palabras significativas (>= 5 chars) para matching multi-palabra
+    const sigWords = catLower.split(' ').filter(w => w.length >= 5);
+    for (const item of allItems) {
+      const txt = (await item.innerText()).trim();
+      const txtLower = txt.toLowerCase();
+      // Match 1: txt contiene la categoría completa
+      const exactMatch = txtLower === catLower || txtLower.includes(catLower);
+      // Match 2: todas las palabras significativas están en txt (evita falsos positivos de prefijo)
+      const wordsMatch = sigWords.length >= 2
+        ? sigWords.every(w => txtLower.includes(w))
+        : sigWords.length === 1 && txtLower.includes(catLower.substring(0, Math.min(catLower.length, 12)));
+      if (exactMatch || wordsMatch) {
+        console.log('[SSI] Categoría seleccionada:', txt);
+        await item.click();
+        categoriaClickeada = true;
+        break;
+      }
+    }
+    if (!categoriaClickeada && allItems.length > 0) {
+      const fallbackTxt = await allItems[1].innerText().catch(() => '?');
+      console.log('[SSI] Fallback — primer ítem:', fallbackTxt);
+      await allItems[1].click();
+    }
+    await page.waitForTimeout(2000); // crítico: jQuery UI necesita este tiempo para fijar estado interno
+
+    // ── Título y descripción DESPUÉS de la categoría ─────────────────────
+    // Si se llenan antes, el blur del #titulo dispara el handler de jQuery UI que resetea el combobox.
     await page.fill('#titulo', titulo.substring(0, 150));
     await page.fill('#descripcion_incidencia', descripcion);
+    await page.waitForTimeout(300);
 
-    // Screenshot antes de enviar (para debug)
     await page.screenshot({ path: path.join(__dirname, '.ssi-before-submit.png') });
 
-    // Enviar
+    // ── Enviar ─────────────────────────────────────────────────────────
     await page.click('#btn_guardar_inc');
-    await page.waitForLoadState('networkidle', { timeout: 20000 }).catch(() => {});
+    // Esperar a que aparezca modal de confirmación (el SSI abre un popup antes de enviar)
+    await page.waitForTimeout(2000);
+    await page.screenshot({ path: path.join(__dirname, '.ssi-modal.png') });
 
-    // Capturar número de ticket del resultado
+    // Intentar hacer clic en el botón de confirmación del modal (varios selectores posibles)
+    const confirmSelectors = [
+      'button.swal2-confirm',
+      '.swal2-confirm',
+      '.modal.show .btn-primary',
+      '.modal.show button[type="submit"]',
+      '.ui-dialog-buttonpane .ui-button',
+      'button:text("Confirmar")',
+      'button:text("Aceptar")',
+      'button:text("Sí")',
+      'button:text("Enviar")',
+      'button:text("Enviar solicitud")',
+      'button:text("Guardar")',
+      '.modal-footer .btn-primary',
+      '.modal-footer button',
+    ];
+    let modalClicked = false;
+    for (const sel of confirmSelectors) {
+      try {
+        const btn = page.locator(sel).first();
+        const visible = await btn.isVisible({ timeout: 800 }).catch(() => false);
+        if (visible) {
+          await btn.click();
+          modalClicked = true;
+          console.log(`[SSI] Clic en botón de confirmación: ${sel}`);
+          break;
+        }
+      } catch { /* selector no encontrado */ }
+    }
+    if (!modalClicked) {
+      console.log('[SSI] No se encontró modal de confirmación, continuando...');
+    }
+
+    // Dar tiempo al SSI para procesar y redirigir
+    await page.waitForLoadState('networkidle', { timeout: 30000 }).catch(() => {});
+    await page.waitForTimeout(4000);
+
+    // ── Capturar resultado ─────────────────────────────────────────────
     const resultado = await page.evaluate(() => {
-      const body = document.body.innerText || '';
-      const numMatch = body.match(/[Nn][°º]\.?\s*(\d{4,8})|[Nn][uú]mero\s*[:#]?\s*(\d{4,8})|incidencia\s*[:#]?\s*(\d{4,8})|ticket\s*[:#]?\s*(\d{4,8})/i);
-      const num = numMatch ? (numMatch[1] || numMatch[2] || numMatch[3] || numMatch[4]) : null;
-
-      // Detectar error en pantalla
+      const body  = document.body.innerText || '';
+      const title = document.title || '';
+      // Primary: indicadores explícitos de número de ticket
+      const primaryMatch = body.match(/[Nn][°º]\.?\s*(\d{4,8})|[Nn][uú]mero\s*[:#]?\s*(\d{4,8})|incidencia\s*[:#]?\s*(\d{4,8})|ticket\s*[:#]?\s*(\d{4,8})/i);
+      let num = primaryMatch ? (primaryMatch[1] || primaryMatch[2] || primaryMatch[3] || primaryMatch[4]) : null;
+      // Fallback: número en tabla de incidencias (SSI redirige a lista tras envío exitoso)
+      if (!num) {
+        const listMatch = body.match(/(\d{5,7})[\s\S]{0,20}SOPORTE/i)
+          || body.match(/(\d{5,7})[\s\S]{0,20}NUEVO/i);
+        if (listMatch) num = listMatch[1];
+      }
       const errEl = document.querySelector('.alert-danger, .alert-error, .error-msg');
       const error = errEl ? errEl.textContent.trim() : null;
-
-      return { num, error, url: window.location.href, bodySnippet: body.substring(0, 300) };
+      const isErrorPage = title.toLowerCase().includes('error') || body.includes('HTTP ERROR') || body.includes('Esta página no funciona');
+      return { num, error, isErrorPage, url: window.location.href, bodySnippet: body.substring(0, 300) };
     });
 
     await page.screenshot({ path: path.join(__dirname, '.ssi-after-submit.png') });
 
+    if (resultado.isErrorPage) {
+      throw new Error('El SSI respondió con error de servidor al enviar el formulario. El campo "Tipo de Solicitud" puede no haberse completado.');
+    }
     if (resultado.error) {
       throw new Error(`SSI respondió con error: ${resultado.error}`);
     }
