@@ -14,6 +14,9 @@ test-*.png
 test_*.docx
 test_out.pdf
 test-results/
+run-*.png
+debug-*.png
+debug-cat-*.png
 
 # Logs
 *.log
