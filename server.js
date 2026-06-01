@@ -6,6 +6,8 @@ const fs = require('fs');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 const { generateAnexo01, generateAnexo02, generateAnexo03, generateAnexo04 } = require('./generators');
 const { crearTicketSSI } = require('./ssi-automation');
+const { chatLimiter, generateLimiter, ticketLimiter } = require('./middleware/rateLimiter');
+const internalOnly = require('./middleware/internalOnly');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -25,7 +27,7 @@ app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-app.post('/api/chat', async (req, res) => {
+app.post('/api/chat', chatLimiter, async (req, res) => {
   const { message, history = [] } = req.body;
 
   if (!message || typeof message !== 'string') {
@@ -74,7 +76,7 @@ app.post('/api/reset', (req, res) => {
   res.json({ ok: true });
 });
 
-app.post('/api/generate', async (req, res) => {
+app.post('/api/generate', generateLimiter, async (req, res) => {
   const { tipo, datos } = req.body;
 
   if (!tipo || !datos) {
@@ -162,7 +164,7 @@ app.get('/api/template/:tipo', (req, res) => {
   }
 });
 
-app.post('/api/ticket-ssi', async (req, res) => {
+app.post('/api/ticket-ssi', internalOnly, ticketLimiter, async (req, res) => {
   const { titulo, descripcion, categoria, sede, categoriaId, sedeId } = req.body;
 
   if (!titulo || !descripcion) {
