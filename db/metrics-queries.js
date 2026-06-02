@@ -105,25 +105,110 @@ async function distribucionUrgencias() {
   return ['P1', 'P2', 'P3', 'P4'].map(n => ({ nivel: n, total: map[n] || 0 }));
 }
 
+// 7. KPIs escalares de volumen: sesiones hoy, 7d y 30d
+async function getVolumenKPIs() {
+  const res = await pool.query(`
+    SELECT
+      COUNT(*) FILTER (
+        WHERE (created_at AT TIME ZONE 'America/Lima')::date
+              = (NOW() AT TIME ZONE 'America/Lima')::date
+      )::int AS sesiones_hoy,
+      COUNT(*) FILTER (
+        WHERE created_at >= NOW() - INTERVAL '7 days'
+      )::int AS sesiones_ultimos_7_dias,
+      COUNT(*) FILTER (
+        WHERE created_at >= NOW() - INTERVAL '30 days'
+      )::int AS sesiones_ultimos_30_dias
+    FROM sessions
+  `);
+  return res.rows[0];
+}
+
+// 8. Serie temporal de documentos generados (ultimos 30 dias con generate_series)
+async function getDocumentosPorDia() {
+  const res = await pool.query(`
+    SELECT
+      to_char(d::date, 'YYYY-MM-DD') AS fecha,
+      COUNT(e.id)::int AS cantidad
+    FROM generate_series(
+      (NOW() AT TIME ZONE 'America/Lima')::date - INTERVAL '29 days',
+      (NOW() AT TIME ZONE 'America/Lima')::date,
+      '1 day'::interval
+    ) AS d
+    LEFT JOIN events e
+      ON (e.created_at AT TIME ZONE 'America/Lima')::date = d::date
+      AND e.tipo = 'documento_generado'
+    GROUP BY d
+    ORDER BY d ASC
+  `);
+  return res.rows;
+}
+
+// 9. Tickets SSI por categoria (acumulado)
+async function getTicketsPorCategoria() {
+  const res = await pool.query(`
+    SELECT
+      COALESCE(payload->>'categoria', 'SIN_CATEGORIA') AS categoria,
+      COUNT(*)::int AS total
+    FROM events
+    WHERE tipo = 'ticket_creado'
+    GROUP BY 1
+    ORDER BY 2 DESC
+  `);
+  return res.rows;
+}
+
+// 10. Tickets SSI por sede (acumulado)
+async function getTicketsPorSede() {
+  const res = await pool.query(`
+    SELECT
+      COALESCE(payload->>'sede', 'SIN_SEDE') AS sede,
+      COUNT(*)::int AS total
+    FROM events
+    WHERE tipo = 'ticket_creado'
+    GROUP BY 1
+    ORDER BY 2 DESC
+  `);
+  return res.rows;
+}
+
 // Wrapper agregador con tolerancia a fallos parciales
 async function getAllMetrics() {
-  const [r1, r2, r3, r4, r5, r6] = await Promise.allSettled([
+  const [r1, r2, r3, r4, r5, r6, r7, r8, r9, r10] = await Promise.allSettled([
     sesionesPorDia(),
     promedioMensajesPorSesion(),
     mensajesPorHora(),
     documentosPorTipo(),
     ticketsCreadosVsFallidos(),
     distribucionUrgencias(),
+    getVolumenKPIs(),
+    getDocumentosPorDia(),
+    getTicketsPorCategoria(),
+    getTicketsPorSede(),
   ]);
   const val = (r) => (r.status === 'fulfilled' ? r.value : null);
+  const kpis = val(r7) || {};
+  const ticketsSSI = val(r5) || {};
   return {
     volumen: {
       sesionesPorDia: val(r1),
       promedioMensajes: val(r2),
       mensajesPorHora: val(r3),
+      sesionesHoy: kpis.sesiones_hoy ?? 0,
+      sesionesUltimos7Dias: kpis.sesiones_ultimos_7_dias ?? 0,
+      sesionesUltimos30Dias: kpis.sesiones_ultimos_30_dias ?? 0,
     },
-    documentos: { porTipo: val(r4) },
-    ticketsSSI: val(r5),
+    documentos: {
+      porTipo: val(r4),
+      porDia: val(r8),
+    },
+    ticketsSSI: {
+      creados: ticketsSSI.creados ?? 0,
+      fallidos: ticketsSSI.fallidos ?? 0,
+      tasa_exito: ticketsSSI.tasa_exito ?? 0,
+      porCategoria: val(r9),
+      porSede: val(r10),
+    },
     urgencias: val(r6),
     generatedAt: new Date().toISOString(),
   };

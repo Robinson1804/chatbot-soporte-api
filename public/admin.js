@@ -42,6 +42,10 @@ function renderAll(d) {
   renderBarDocs(d.documentos?.porTipo);
   renderDoughnutUrgencias(d.urgencias);
   renderDoughnutTickets(d.ticketsSSI);
+  renderKpiVolumen(d.volumen);
+  renderLineDocsPorDia(d.documentos?.porDia);
+  renderTablaCategoria(d.ticketsSSI?.porCategoria);
+  renderTablaSede(d.ticketsSSI?.porSede);
 }
 
 // ─── KPI helpers ──────────────────────────────────────────────────────────────
@@ -57,8 +61,9 @@ function renderKpiTickets(data) {
   const el = document.getElementById('kpiTickets');
   const sub = document.getElementById('kpiTicketsSub');
   if (!data) { el.textContent = 'N/D'; sub.textContent = ''; return; }
-  el.textContent = data.tasa_exito !== null ? `${data.tasa_exito}%` : 'N/D';
-  sub.textContent = `${data.creados} creados / ${data.fallidos} fallidos`;
+  const tasa = data.tasa_exito ?? 0;
+  el.textContent = `${tasa}%`;
+  sub.textContent = `${data.creados ?? 0} creados / ${data.fallidos ?? 0} fallidos`;
 }
 
 // ─── Chart upsert helper ───────────────────────────────────────────────────────
@@ -179,6 +184,65 @@ function renderDoughnutTickets(data) {
       plugins: { legend: { position: 'bottom' } },
     },
   });
+}
+
+// ─── KPIs escalares de volumen ────────────────────────────────────────────────
+function renderKpiVolumen(volumen) {
+  const hoy = document.getElementById('kpi-sesiones-hoy');
+  const s7d = document.getElementById('kpi-sesiones-7d');
+  const s30d = document.getElementById('kpi-sesiones-30d');
+  if (!volumen) {
+    if (hoy) hoy.textContent = 'N/D';
+    if (s7d) s7d.textContent = 'N/D';
+    if (s30d) s30d.textContent = 'N/D';
+    return;
+  }
+  if (hoy) hoy.textContent = volumen.sesionesHoy ?? '--';
+  if (s7d) s7d.textContent = volumen.sesionesUltimos7Dias ?? '--';
+  if (s30d) s30d.textContent = volumen.sesionesUltimos30Dias ?? '--';
+}
+
+// ─── Line chart: documentos por día (30d) ─────────────────────────────────────
+function renderLineDocsPorDia(rows) {
+  if (!rows) return;
+  upsertChart('chartDocsPorDia', {
+    type: 'line',
+    data: {
+      labels: rows.map(r => r.fecha.slice(5)), // MM-DD
+      datasets: [{
+        label: 'Documentos',
+        data: rows.map(r => r.cantidad),
+        borderColor: '#1565C0',
+        backgroundColor: 'rgba(21,101,192,0.12)',
+        fill: true,
+        tension: 0.3,
+        pointRadius: 2,
+      }],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: true,
+      plugins: { legend: { display: false } },
+      scales: { y: { beginAtZero: true, ticks: { precision: 0 } } },
+    },
+  });
+}
+
+// ─── Tablas: tickets por categoría y por sede ─────────────────────────────────
+function renderTabla(tableId, rows, colKey) {
+  const tbody = document.querySelector(`#${tableId} tbody`);
+  if (!tbody || !rows) return;
+  tbody.innerHTML = rows.map(r =>
+    `<tr><td>${r[colKey]}</td><td>${r.total}</td></tr>`
+  ).join('');
+}
+
+function renderTablaCategoria(rows) {
+  renderTabla('tablaTicketsCategoria', rows, 'categoria');
+}
+
+function renderTablaSede(rows) {
+  renderTabla('tablaTicketsSede', rows, 'sede');
 }
 
 // ─── Bootstrap ────────────────────────────────────────────────────────────────

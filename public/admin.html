@@ -59,6 +59,46 @@
       <h2>Tickets SSI: creados vs fallidos</h2>
       <canvas id="chartTicketsSSI"></canvas>
     </section>
+
+    <!-- KPIs escalares: volumen de sesiones -->
+    <section class="card kpi-card">
+      <h2>Sesiones — hoy</h2>
+      <div id="kpi-sesiones-hoy" class="kpi-value">--</div>
+    </section>
+
+    <section class="card kpi-card">
+      <h2>Sesiones — últimos 7 días</h2>
+      <div id="kpi-sesiones-7d" class="kpi-value">--</div>
+    </section>
+
+    <section class="card kpi-card">
+      <h2>Sesiones — últimos 30 días</h2>
+      <div id="kpi-sesiones-30d" class="kpi-value">--</div>
+    </section>
+
+    <!-- Chart: documentos por día (30d) -->
+    <section class="card chart-card">
+      <h2>Documentos generados por día (30d)</h2>
+      <canvas id="chartDocsPorDia"></canvas>
+    </section>
+
+    <!-- Tabla: tickets SSI por categoría -->
+    <section class="card">
+      <h2>Tickets SSI por categoría</h2>
+      <table id="tablaTicketsCategoria" class="admin-table">
+        <thead><tr><th>Categoría</th><th>Total</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </section>
+
+    <!-- Tabla: tickets SSI por sede -->
+    <section class="card">
+      <h2>Tickets SSI por sede</h2>
+      <table id="tablaTicketsSede" class="admin-table">
+        <thead><tr><th>Sede</th><th>Total</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </section>
   </main>
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
