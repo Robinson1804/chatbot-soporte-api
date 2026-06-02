@@ -11,6 +11,7 @@ const internalOnly = require('./middleware/internalOnly');
 const cookieParser = require('cookie-parser');
 const sessionMiddleware = require('./middleware/session');
 const { getSessionMessages, saveMessage, saveEvent } = require('./db/queries');
+const { initCache, getCacheRef } = require('./cache/geminiCache');
 const toolDeclarations = require('./tools/definitions');
 const toolHandlers     = require('./tools/handlers');
 
@@ -52,12 +53,25 @@ app.post('/api/chat', chatLimiter, sessionMiddleware, async (req, res) => {
   }));
 
   try {
-    const model = genAI.getGenerativeModel({
-      model: 'models/gemini-2.5-flash',
-      systemInstruction: SYSTEM_PROMPT,
-      tools: [{ functionDeclarations: toolDeclarations }],
-      toolConfig: { functionCallingConfig: { mode: 'AUTO' } },
-    });
+    const activeCacheRef = getCacheRef();
+    let model;
+
+    if (activeCacheRef) {
+      model = genAI.getGenerativeModelFromCachedContent(
+        { name: activeCacheRef },
+        {
+          tools: [{ functionDeclarations: toolDeclarations }],
+          toolConfig: { functionCallingConfig: { mode: 'AUTO' } },
+        }
+      );
+    } else {
+      model = genAI.getGenerativeModel({
+        model: 'models/gemini-2.5-flash',
+        systemInstruction: SYSTEM_PROMPT,
+        tools: [{ functionDeclarations: toolDeclarations }],
+        toolConfig: { functionCallingConfig: { mode: 'AUTO' } },
+      });
+    }
 
     const chat = model.startChat({ history: geminiHistory });
     const result = await chat.sendMessageStream(message);
@@ -222,6 +236,15 @@ app.post('/api/ticket-ssi', internalOnly, ticketLimiter, async (req, res) => {
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`Servidor OTIN Chatbot corriendo en http://localhost:${PORT}`);
-});
+async function startServer() {
+  try {
+    await initCache(process.env.GEMINI_API_KEY, SYSTEM_PROMPT);
+  } catch (err) {
+    console.warn('Context Cache no disponible, usando systemInstruction directo:', err.message);
+  }
+  app.listen(PORT, () => {
+    console.log(`Servidor OTIN Chatbot corriendo en http://localhost:${PORT}`);
+  });
+}
+
+startServer();
