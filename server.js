@@ -8,6 +8,9 @@ const { generateAnexo01, generateAnexo02, generateAnexo03, generateAnexo04 } = r
 const { crearTicketSSI } = require('./ssi-automation');
 const { chatLimiter, generateLimiter, ticketLimiter } = require('./middleware/rateLimiter');
 const internalOnly = require('./middleware/internalOnly');
+const cookieParser = require('cookie-parser');
+const sessionMiddleware = require('./middleware/session');
+const { getSessionMessages, saveMessage } = require('./db/queries');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -20,6 +23,7 @@ const SYSTEM_PROMPT = fs.readFileSync(
 );
 
 app.use(cors());
+app.use(cookieParser());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
@@ -27,8 +31,8 @@ app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-app.post('/api/chat', chatLimiter, async (req, res) => {
-  const { message, history = [] } = req.body;
+app.post('/api/chat', chatLimiter, sessionMiddleware, async (req, res) => {
+  const { message } = req.body;
 
   if (!message || typeof message !== 'string') {
     return res.status(400).json({ error: 'El campo "message" es requerido.' });
@@ -39,8 +43,8 @@ app.post('/api/chat', chatLimiter, async (req, res) => {
   res.setHeader('Connection', 'keep-alive');
   res.setHeader('X-Accel-Buffering', 'no');
 
-  // Convertir historial al formato de Gemini (role: 'user' | 'model')
-  const geminiHistory = history.map(({ role, content }) => ({
+  const dbHistory = await getSessionMessages(req.sessionId);
+  const geminiHistory = dbHistory.map(({ role, content }) => ({
     role: role === 'assistant' ? 'model' : 'user',
     parts: [{ text: content }],
   }));
@@ -54,25 +58,30 @@ app.post('/api/chat', chatLimiter, async (req, res) => {
     const chat = model.startChat({ history: geminiHistory });
     const result = await chat.sendMessageStream(message);
 
+    let fullText = '';
     for await (const chunk of result.stream) {
       const text = chunk.text();
       if (text) {
-        const payload = JSON.stringify({ delta: text });
-        res.write(`data: ${payload}\n\n`);
+        fullText += text;
+        res.write(`data: ${JSON.stringify({ delta: text })}\n\n`);
       }
     }
+
+    // Persistir en DB
+    await saveMessage(req.sessionId, 'user', message);
+    await saveMessage(req.sessionId, 'assistant', fullText);
 
     res.write('data: [DONE]\n\n');
     res.end();
   } catch (err) {
     console.error('Error Gemini API:', err.message);
-    const errorPayload = JSON.stringify({ error: 'OcurriÃ³ un error al procesar su solicitud. Por favor intente nuevamente.' });
-    res.write(`data: ${errorPayload}\n\n`);
+    res.write(`data: ${JSON.stringify({ error: 'Ocurrió un error al procesar su solicitud. Por favor intente nuevamente.' })}\n\n`);
     res.end();
   }
 });
 
 app.post('/api/reset', (req, res) => {
+  res.clearCookie('otin_session');
   res.json({ ok: true });
 });
 
