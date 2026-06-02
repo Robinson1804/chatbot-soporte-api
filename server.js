@@ -11,7 +11,7 @@ const internalOnly = require('./middleware/internalOnly');
 const cookieParser = require('cookie-parser');
 const sessionMiddleware = require('./middleware/session');
 const { getSessionMessages, saveMessage, saveEvent } = require('./db/queries');
-const { initCache, getCacheRef } = require('./cache/geminiCache');
+const { initCache, getCachedContent } = require('./cache/geminiCache');
 const toolDeclarations = require('./tools/definitions');
 const toolHandlers     = require('./tools/handlers');
 
@@ -53,17 +53,11 @@ app.post('/api/chat', chatLimiter, sessionMiddleware, async (req, res) => {
   }));
 
   try {
-    const activeCacheRef = getCacheRef();
+    const activeCachedContent = getCachedContent();
     let model;
 
-    if (activeCacheRef) {
-      model = genAI.getGenerativeModelFromCachedContent(
-        { name: activeCacheRef },
-        {
-          tools: [{ functionDeclarations: toolDeclarations }],
-          toolConfig: { functionCallingConfig: { mode: 'AUTO' } },
-        }
-      );
+    if (activeCachedContent) {
+      model = genAI.getGenerativeModelFromCachedContent(activeCachedContent);
     } else {
       model = genAI.getGenerativeModel({
         model: 'models/gemini-2.5-flash',
@@ -238,7 +232,7 @@ app.post('/api/ticket-ssi', internalOnly, ticketLimiter, async (req, res) => {
 
 async function startServer() {
   try {
-    await initCache(process.env.GEMINI_API_KEY, SYSTEM_PROMPT);
+    await initCache(process.env.GEMINI_API_KEY, SYSTEM_PROMPT, toolDeclarations);
   } catch (err) {
     console.warn('Context Cache no disponible, usando systemInstruction directo:', err.message);
   }

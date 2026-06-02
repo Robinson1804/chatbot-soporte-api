@@ -1,38 +1,45 @@
 const { GoogleAICacheManager } = require('@google/generative-ai/server');
 
-let cacheRef = null;
+let cachedContent = null;
 let cacheExpiresAt = null;
 let renewTimer = null;
 
-async function initCache(apiKey, systemPrompt) {
+async function initCache(apiKey, systemPrompt, toolDeclarations) {
   const cacheManager = new GoogleAICacheManager(apiKey);
   const ttlSeconds = 3600;
 
-  const cache = await cacheManager.create({
+  const createParams = {
     model: 'models/gemini-2.5-flash',
     displayName: 'chatbot-otin-system-prompt',
     systemInstruction: { parts: [{ text: systemPrompt }] },
     ttlSeconds,
-  });
+  };
 
-  cacheRef = cache.name;
+  if (toolDeclarations?.length) {
+    createParams.tools = [{ functionDeclarations: toolDeclarations }];
+    createParams.toolConfig = { functionCallingConfig: { mode: 'AUTO' } };
+  }
+
+  const cache = await cacheManager.create(createParams);
+
+  cachedContent = cache;
   cacheExpiresAt = Date.now() + (ttlSeconds - 60) * 1000;
 
   if (renewTimer) clearTimeout(renewTimer);
   renewTimer = setTimeout(() => {
-    initCache(apiKey, systemPrompt).catch((err) => {
+    initCache(apiKey, systemPrompt, toolDeclarations).catch((err) => {
       console.error('Error renovando Gemini Context Cache:', err.message);
-      cacheRef = null;
+      cachedContent = null;
     });
   }, (ttlSeconds - 300) * 1000);
 
-  console.log(`Gemini Context Cache activo: ${cacheRef}`);
-  return cacheRef;
+  console.log(`Gemini Context Cache activo: ${cache.name}`);
+  return cache;
 }
 
-function getCacheRef() {
-  if (cacheRef && cacheExpiresAt && Date.now() < cacheExpiresAt) return cacheRef;
+function getCachedContent() {
+  if (cachedContent && cacheExpiresAt && Date.now() < cacheExpiresAt) return cachedContent;
   return null;
 }
 
-module.exports = { initCache, getCacheRef };
+module.exports = { initCache, getCachedContent };
