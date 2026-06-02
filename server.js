@@ -10,7 +10,9 @@ const { chatLimiter, generateLimiter, ticketLimiter } = require('./middleware/ra
 const internalOnly = require('./middleware/internalOnly');
 const cookieParser = require('cookie-parser');
 const sessionMiddleware = require('./middleware/session');
-const { getSessionMessages, saveMessage } = require('./db/queries');
+const { getSessionMessages, saveMessage, saveEvent } = require('./db/queries');
+const toolDeclarations = require('./tools/definitions');
+const toolHandlers     = require('./tools/handlers');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -53,23 +55,54 @@ app.post('/api/chat', chatLimiter, sessionMiddleware, async (req, res) => {
     const model = genAI.getGenerativeModel({
       model: 'models/gemini-2.5-flash',
       systemInstruction: SYSTEM_PROMPT,
+      tools: [{ functionDeclarations: toolDeclarations }],
+      toolConfig: { functionCallingConfig: { mode: 'AUTO' } },
     });
 
     const chat = model.startChat({ history: geminiHistory });
     const result = await chat.sendMessageStream(message);
 
     let fullText = '';
+    const pendingToolCalls = [];
+
     for await (const chunk of result.stream) {
-      const text = chunk.text();
-      if (text) {
-        fullText += text;
-        res.write(`data: ${JSON.stringify({ delta: text })}\n\n`);
+      const parts = chunk.candidates?.[0]?.content?.parts || [];
+      for (const part of parts) {
+        if (part.text) {
+          fullText += part.text;
+          res.write(`data: ${JSON.stringify({ delta: part.text })}\n\n`);
+        }
+        if (part.functionCall) {
+          pendingToolCalls.push(part.functionCall);
+        }
       }
     }
 
     // Persistir en DB
     await saveMessage(req.sessionId, 'user', message);
-    await saveMessage(req.sessionId, 'assistant', fullText);
+    if (fullText) {
+      await saveMessage(req.sessionId, 'assistant', fullText);
+    }
+
+    // Ejecutar tool calls y emitir action events al cliente
+    for (const toolCall of pendingToolCalls) {
+      const { name, args } = toolCall;
+      const handler = toolHandlers[name];
+      if (!handler) continue;
+
+      const payload = name === 'create_ssi_ticket'
+        ? await handler(args, req.sessionId)
+        : await handler(args);
+
+      if (name === 'generate_document' && payload.ok) {
+        await saveEvent(req.sessionId, 'documento_generado', { tipo: args.tipo });
+      }
+      if (name === 'set_urgency') {
+        await saveEvent(req.sessionId, 'urgencia_asignada', { nivel: args.nivel });
+      }
+
+      res.write(`data: ${JSON.stringify({ action: name, payload })}\n\n`);
+    }
 
     res.write('data: [DONE]\n\n');
     res.end();
