@@ -387,6 +387,7 @@ function renderChips(chips, afterRow) {
     btn.className = 'chip-btn';
     btn.textContent = chip;
     btn.addEventListener('click', () => {
+      if (isStreaming) return;
       removeChips();
       sendMessage(chip);
     });

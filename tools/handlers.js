@@ -9,9 +9,20 @@ async function handleGenerateDocument({ tipo, datos }) {
   return { ok: true, tipo, datos };
 }
 
-async function handleCreateSSITicket({ titulo, descripcion, categoria, sede }, sessionId) {
+const SSI_TIMEOUT_MS = 120_000; // 2 min — Playwright + navegación SSI
+
+async function handleCreateSSITicket({ titulo, descripcion, categoria, categoriaId, sede, sedeId }, sessionId) {
+  const timeoutPromise = new Promise((_, reject) =>
+    setTimeout(
+      () => reject(new Error('Tiempo de espera agotado. El sistema SSI no respondió en 2 minutos.')),
+      SSI_TIMEOUT_MS,
+    ),
+  );
   try {
-    const resultado = await crearTicketSSI({ titulo, descripcion, categoria, sede });
+    const resultado = await Promise.race([
+      crearTicketSSI({ titulo, descripcion, categoria, categoriaId, sede, sedeId }),
+      timeoutPromise,
+    ]);
     if (sessionId) {
       await saveEvent(sessionId, 'ticket_creado', {
         titulo, categoria, sede, ticketNum: resultado.ticketNum,
@@ -19,6 +30,7 @@ async function handleCreateSSITicket({ titulo, descripcion, categoria, sede }, s
     }
     return { ok: true, ticketNum: resultado.ticketNum, mensaje: resultado.mensaje };
   } catch (err) {
+    console.error('[SSI] handleCreateSSITicket error:', err.message);
     if (sessionId) {
       await saveEvent(sessionId, 'error_ssi', { titulo, error: err.message });
     }
