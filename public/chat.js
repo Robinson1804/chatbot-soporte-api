@@ -115,35 +115,19 @@ async function sendMessage(text) {
             renderBubbleContent(bubbleEl, fullText);
             scrollToBottom();
           }
+
+          if (parsed.action) {
+            handleActionEvent(parsed.action, parsed.payload, rowEl, bubbleEl);
+          }
         } catch {
           /* línea SSE malformada — ignorar */
         }
       }
     }
 
-    const { cleanText, chips, docGenPayload, urgencia, templatePayload, ticketSSIPayload } = extractChips(fullText);
-    renderBubbleContent(bubbleEl, cleanText);
-
-    if (urgencia) prependUrgencyBadge(bubbleEl, urgencia);
-
+    renderBubbleContent(bubbleEl, fullText);
     history.push({ role: 'assistant', content: fullText });
     saveHistory();
-
-    if (chips.length > 0) {
-      renderChips(chips, rowEl);
-    }
-
-    if (docGenPayload && docGenPayload.tipo && docGenPayload.datos) {
-      generateDocument(docGenPayload.tipo, docGenPayload.datos, rowEl);
-    }
-
-    if (templatePayload) {
-      downloadTemplate(templatePayload, rowEl);
-    }
-
-    if (ticketSSIPayload) {
-      crearTicketSSIDesdeChat(ticketSSIPayload, rowEl);
-    }
 
   } catch (err) {
     typingRow.remove();
@@ -157,6 +141,34 @@ async function sendMessage(text) {
     setStreaming(false);
     scrollToBottom();
     userInput.focus();
+  }
+}
+
+function handleActionEvent(action, payload, rowEl, bubbleEl) {
+  switch (action) {
+    case 'generate_document':
+      if (payload.ok && payload.tipo && payload.datos) {
+        generateDocument(payload.tipo, payload.datos, rowEl);
+      }
+      break;
+    case 'create_ssi_ticket':
+      showTicketResult(payload, rowEl);
+      break;
+    case 'download_template':
+      if (payload.ok && payload.tipo) {
+        downloadTemplate(payload.tipo, rowEl);
+      }
+      break;
+    case 'set_urgency':
+      if (payload.ok && payload.nivel) {
+        prependUrgencyBadge(bubbleEl, payload.nivel);
+      }
+      break;
+    case 'show_chips':
+      if (payload.ok && payload.opciones?.length) {
+        renderChips(payload.opciones, rowEl);
+      }
+      break;
   }
 }
 
@@ -310,60 +322,6 @@ function simpleMarkdown(text) {
 /* ============================================================
    CHIPS
    ============================================================ */
-function extractChips(text) {
-  const chipsRegex = /\[CHIPS:\s*([^\]]+)\]/g;
-  const chips = [];
-  let match;
-
-  while ((match = chipsRegex.exec(text)) !== null) {
-    const options = match[1].split('|').map((s) => s.trim()).filter(Boolean);
-    chips.push(...options);
-  }
-
-  // Extraer tag de generación de documento
-  let docGenPayload = null;
-  const genRegex = /\[GENERAR_DOCUMENTO:(\{[\s\S]*?\})\]/;
-  const genMatch = text.match(genRegex);
-  if (genMatch) {
-    try {
-      docGenPayload = JSON.parse(genMatch[1]);
-    } catch (e) {
-      console.warn('Tag GENERAR_DOCUMENTO con JSON inválido:', genMatch[1]);
-    }
-  }
-
-  // Extraer tag de urgencia
-  let urgencia = null;
-  const urgenciaMatch = text.match(/\[URGENCIA:(P[1-4])\]/);
-  if (urgenciaMatch) urgencia = urgenciaMatch[1];
-
-  // Extraer tag de plantilla en blanco
-  let templatePayload = null;
-  const templateMatch = text.match(/\[DESCARGAR_PLANTILLA:(ANEXO0[1-4])\]/);
-  if (templateMatch) templatePayload = templateMatch[1];
-
-  // Extraer tag de creación de ticket SSI
-  let ticketSSIPayload = null;
-  const ticketMatch = text.match(/\[CREAR_TICKET_SSI:(\{[\s\S]*?\})\]/);
-  if (ticketMatch) {
-    try {
-      ticketSSIPayload = JSON.parse(ticketMatch[1]);
-    } catch (e) {
-      console.warn('Tag CREAR_TICKET_SSI con JSON inválido:', ticketMatch[1]);
-    }
-  }
-
-  const cleanText = text
-    .replace(/\[CHIPS:[^\]]*\]/g, '')
-    .replace(/\[GENERAR_DOCUMENTO:\{[\s\S]*?\}\]/g, '')
-    .replace(/\[URGENCIA:P[1-4]\]/g, '')
-    .replace(/\[DESCARGAR_PLANTILLA:ANEXO0[1-4]\]/g, '')
-    .replace(/\[CREAR_TICKET_SSI:\{[\s\S]*?\}\]/g, '')
-    .trim();
-
-  return { cleanText, chips, docGenPayload, urgencia, templatePayload, ticketSSIPayload };
-}
-
 /* ============================================================
    GENERACIÓN DE DOCUMENTOS
    ============================================================ */
@@ -531,14 +489,27 @@ function downloadTemplate(tipo, triggerRow) {
 /* ============================================================
    CREACIÓN DE TICKET SSI AUTOMÁTICO
    ============================================================ */
-async function crearTicketSSIDesdeChat(payload, triggerRow) {
+function showTicketResult(payload, triggerRow) {
   const btnRow = document.createElement('div');
   btnRow.className = 'doc-download-row';
 
-  const statusEl = document.createElement('p');
-  statusEl.className = 'doc-note';
-  statusEl.textContent = '⏳ Creando ticket en el SSI…';
-  btnRow.appendChild(statusEl);
+  if (!payload.ok) {
+    const err = document.createElement('p');
+    err.className = 'doc-note';
+    err.textContent = `❌ No se pudo crear el ticket: ${payload.error || 'Error desconocido'}`;
+    btnRow.appendChild(err);
+  } else {
+    const iconSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="16" height="16"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>`;
+    const tag = document.createElement('span');
+    tag.className = 'doc-download-btn';
+    tag.style.cursor = 'default';
+    tag.innerHTML = `${iconSvg} ${payload.mensaje}`;
+    btnRow.appendChild(tag);
+    const note = document.createElement('p');
+    note.className = 'doc-note';
+    note.textContent = 'Podés hacer seguimiento en webapp.inei.gob.pe/ssi';
+    btnRow.appendChild(note);
+  }
 
   if (triggerRow && triggerRow.parentNode === messagesEl) {
     triggerRow.insertAdjacentElement('afterend', btnRow);
@@ -546,40 +517,6 @@ async function crearTicketSSIDesdeChat(payload, triggerRow) {
     messagesEl.appendChild(btnRow);
   }
   scrollToBottom();
-
-  try {
-    const res = await fetch('/api/ticket-ssi', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-    const data = await res.json();
-
-    if (!res.ok || !data.ok) {
-      statusEl.textContent = `❌ No se pudo crear el ticket: ${data.error || 'Error desconocido'}`;
-      return;
-    }
-
-    btnRow.innerHTML = '';
-    const iconSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="16" height="16"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>`;
-    const tag = document.createElement('span');
-    tag.className = 'doc-download-btn';
-    tag.style.cursor = 'default';
-    tag.innerHTML = `${iconSvg} ${data.mensaje}`;
-    btnRow.appendChild(tag);
-
-    const note = document.createElement('p');
-    note.className = 'doc-note';
-    note.textContent = 'Podés hacer seguimiento en webapp.inei.gob.pe/ssi';
-    btnRow.appendChild(note);
-
-    // Informar al historial
-    history.push({ role: 'assistant', content: data.mensaje });
-    saveHistory();
-    scrollToBottom();
-  } catch (err) {
-    statusEl.textContent = `❌ Error de conexión al crear el ticket: ${err.message}`;
-  }
 }
 
 /* ============================================================
