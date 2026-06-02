@@ -1,0 +1,102 @@
+/* admin.css — Dashboard OTIN/INEI
+   Requiere style.css cargado primero para heredar CSS vars:
+   --color-primary, --color-bg, --color-text, --color-border,
+   --color-text-muted, --color-error, --color-error-text,
+   --shadow-sm, --font
+*/
+
+.admin-body {
+  background: var(--color-bg, #f8fafc);
+  color: var(--color-text, #1e293b);
+  font-family: var(--font, system-ui, sans-serif);
+  padding: 24px;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.admin-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 24px;
+  padding-bottom: 12px;
+  border-bottom: 2px solid var(--color-primary, #1565C0);
+}
+
+.admin-header h1 {
+  color: var(--color-primary, #1565C0);
+  font-size: 1.4rem;
+  font-weight: 700;
+  margin: 0;
+}
+
+.admin-updated {
+  font-size: 0.8rem;
+  color: var(--color-text-muted, #64748b);
+}
+
+.admin-error {
+  background: var(--color-error, #fee2e2);
+  color: var(--color-error-text, #991b1b);
+  padding: 10px 14px;
+  border-radius: 8px;
+  margin-bottom: 16px;
+  font-size: 0.9rem;
+}
+
+.admin-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 16px;
+}
+
+.card {
+  background: #fff;
+  border: 1px solid var(--color-border, #e2e8f0);
+  border-radius: 12px;
+  padding: 16px;
+  box-shadow: var(--shadow-sm, 0 1px 3px rgba(0,0,0,.08));
+}
+
+.card h2 {
+  font-size: 0.9rem;
+  color: var(--color-text-muted, #64748b);
+  font-weight: 600;
+  margin: 0 0 12px 0;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.kpi-card .kpi-value {
+  font-size: 2.4rem;
+  font-weight: 700;
+  color: var(--color-primary, #1565C0);
+  line-height: 1;
+  margin-bottom: 4px;
+}
+
+.kpi-card small {
+  color: var(--color-text-muted, #64748b);
+  font-size: 0.75rem;
+}
+
+.chart-card {
+  min-height: 280px;
+}
+
+.chart-card canvas {
+  max-height: 240px;
+}
+
+@media (max-width: 600px) {
+  .admin-body {
+    padding: 12px;
+  }
+  .admin-grid {
+    grid-template-columns: 1fr;
+  }
+  .admin-header {
+    flex-direction: column;
+    gap: 4px;
+  }
+}

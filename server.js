@@ -14,6 +14,7 @@ const { getSessionMessages, saveMessage, saveEvent } = require('./db/queries');
 const { initCache, getCachedContent } = require('./cache/geminiCache');
 const toolDeclarations = require('./tools/definitions');
 const toolHandlers     = require('./tools/handlers');
+const { getAllMetrics } = require('./db/metrics-queries');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -227,6 +228,23 @@ app.post('/api/ticket-ssi', internalOnly, ticketLimiter, async (req, res) => {
   } catch (err) {
     console.error('Error SSI automation:', err.message);
     res.status(500).json({ error: err.message || 'No se pudo crear el ticket en el SSI.' });
+  }
+});
+
+// TODO: activar internalOnly cuando se requiera acceso restringido
+app.get('/admin', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'admin.html'));
+});
+
+// TODO: activar internalOnly cuando se requiera acceso restringido
+app.get('/api/metrics', async (req, res) => {
+  try {
+    const data = await getAllMetrics();
+    res.setHeader('Cache-Control', 'no-store');
+    res.json(data);
+  } catch (err) {
+    console.error('Error /api/metrics:', err.message);
+    res.status(500).json({ error: 'metrics_unavailable' });
   }
 });
 
