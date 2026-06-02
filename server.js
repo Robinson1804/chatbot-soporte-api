@@ -26,7 +26,7 @@ const SYSTEM_PROMPT = fs.readFileSync(
   'utf8'
 );
 
-app.use(cors());
+app.use(cors({ origin: process.env.ALLOWED_ORIGIN || true }));
 app.use(cookieParser());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
@@ -40,6 +40,10 @@ app.post('/api/chat', chatLimiter, sessionMiddleware, async (req, res) => {
 
   if (!message || typeof message !== 'string') {
     return res.status(400).json({ error: 'El campo "message" es requerido.' });
+  }
+
+  if (message.length > 4000) {
+    return res.status(400).json({ error: 'El mensaje no puede superar los 4000 caracteres.' });
   }
 
   res.setHeader('Content-Type', 'text/event-stream');
@@ -68,6 +72,8 @@ app.post('/api/chat', chatLimiter, sessionMiddleware, async (req, res) => {
       });
     }
 
+    await saveMessage(req.sessionId, 'user', message);
+
     const chat = model.startChat({ history: geminiHistory });
     const result = await chat.sendMessageStream(message);
 
@@ -87,8 +93,6 @@ app.post('/api/chat', chatLimiter, sessionMiddleware, async (req, res) => {
       }
     }
 
-    // Persistir en DB
-    await saveMessage(req.sessionId, 'user', message);
     if (fullText) {
       await saveMessage(req.sessionId, 'assistant', fullText);
     }
@@ -207,7 +211,8 @@ app.get('/api/template/:tipo', (req, res) => {
     res.setHeader('Content-Disposition', `attachment; filename="${tipo}_plantilla_INEI.docx"`);
     res.setHeader('Content-Length', buffer.length);
     res.send(buffer);
-  } catch {
+  } catch (err) {
+    console.error('[template] docxtemplater fallback:', err.message);
     // Fallback: servir el archivo crudo si docxtemplater falla
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
     res.setHeader('Content-Disposition', `attachment; filename="${tipo}_plantilla_INEI.docx"`);

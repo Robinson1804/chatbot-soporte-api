@@ -208,7 +208,7 @@ async function login(page, ctx) {
 // ─── Función principal ─────────────────────────────────────────────────────
 async function crearTicketSSI({ categoria, categoriaId, sede, sedeId, titulo, descripcion }) {
   const browser = await chromium.launch({
-    headless: false, // headful para evitar detección de proxy INEI
+    headless: process.env.PLAYWRIGHT_HEADLESS === 'true', // headful por defecto (INEI requiere GUI)
     slowMo: 300,     // necesario para que jQuery UI procese los eventos del dropdown
     args: ['--disable-blink-features=AutomationControlled', '--start-maximized'],
   });
