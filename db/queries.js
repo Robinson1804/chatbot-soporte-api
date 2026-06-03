@@ -44,4 +44,11 @@ async function saveEvent(sessionId, tipo, payload = {}) {
   );
 }
 
-module.exports = { createSession, sessionExists, getSessionMessages, saveMessage, saveEvent };
+async function cleanupOldSessions(daysOld = 90) {
+  const res = await pool.query(
+    `DELETE FROM sessions WHERE updated_at < NOW() - INTERVAL '${daysOld} days' RETURNING id`
+  );
+  return res.rowCount;
+}
+
+module.exports = { createSession, sessionExists, getSessionMessages, saveMessage, saveEvent, cleanupOldSessions };
