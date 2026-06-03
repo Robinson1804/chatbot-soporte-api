@@ -10,11 +10,12 @@ const { chatLimiter, generateLimiter, ticketLimiter } = require('./middleware/ra
 const internalOnly = require('./middleware/internalOnly');
 const cookieParser = require('cookie-parser');
 const sessionMiddleware = require('./middleware/session');
-const { getSessionMessages, saveMessage, saveEvent } = require('./db/queries');
+const { getSessionMessages, saveMessage, saveEvent, cleanupOldSessions } = require('./db/queries');
 const { initCache, getCachedContent } = require('./cache/geminiCache');
 const toolDeclarations = require('./tools/definitions');
 const toolHandlers     = require('./tools/handlers');
 const { getAllMetrics } = require('./db/metrics-queries');
+const horarioLaboral = require('./middleware/horarioLaboral');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -35,7 +36,7 @@ app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-app.post('/api/chat', chatLimiter, sessionMiddleware, async (req, res) => {
+app.post('/api/chat', chatLimiter, horarioLaboral, sessionMiddleware, async (req, res) => {
   const { message } = req.body;
 
   if (!message || typeof message !== 'string') {
@@ -45,6 +46,8 @@ app.post('/api/chat', chatLimiter, sessionMiddleware, async (req, res) => {
   if (message.length > 4000) {
     return res.status(400).json({ error: 'El mensaje no puede superar los 4000 caracteres.' });
   }
+
+  const reqStart = Date.now();
 
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
@@ -96,6 +99,15 @@ app.post('/api/chat', chatLimiter, sessionMiddleware, async (req, res) => {
     if (fullText) {
       await saveMessage(req.sessionId, 'assistant', fullText);
     }
+
+    const esEscalamiento = /escalar|soporte.{1,20}presencial|conectar.{1,20}técnico|llamar INMEDIATAMENTE/i.test(fullText);
+    if (esEscalamiento) {
+      await saveEvent(req.sessionId, 'escalamiento', { trigger: 'auto_detect' }).catch(() => {});
+    }
+
+    const latencyMs = Date.now() - reqStart;
+    console.log(`[chat] latencia=${latencyMs}ms session=${req.sessionId?.substring(0, 8)}`);
+    await saveEvent(req.sessionId, 'chat_latencia', { ms: latencyMs }).catch(() => {});
 
     // Ejecutar tool calls y emitir action events al cliente
     for (const toolCall of pendingToolCalls) {
@@ -183,12 +195,27 @@ app.post('/api/generate', generateLimiter, async (req, res) => {
 
 app.get('/api/template/:tipo', (req, res) => {
   const { tipo } = req.params;
+
+  // PROD02 y F01 se sirven directo desde Anexos/
+  if (tipo === 'PROD02') {
+    const filePath = path.join(__dirname, 'Anexos', 'PROD02_INEI_FORMATO_SOLICITUD_PERMISOS.docx');
+    if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'Formato PROD-02 no disponible.' });
+    res.setHeader('Content-Disposition', 'attachment; filename="PROD02_Solicitud_Permisos_BD_INEI.docx"');
+    return res.sendFile(filePath);
+  }
+  if (tipo === 'F01') {
+    const filePath = path.join(__dirname, 'Anexos', 'Formato de Altas y Bajas propuesto V2.xlsx');
+    if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'Formato F-01 no disponible.' });
+    res.setHeader('Content-Disposition', 'attachment; filename="Formato_F01_Altas_Bajas_INEI.xlsx"');
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    return res.sendFile(filePath);
+  }
+
   const allowed = ['ANEXO01', 'ANEXO02', 'ANEXO03', 'ANEXO04'];
   if (!allowed.includes(tipo)) {
-    return res.status(404).json({ error: 'Tipo no vÃ¡lido.' });
+    return res.status(404).json({ error: 'Tipo no válido.' });
   }
   const templatePath = path.join(__dirname, 'templates', `${tipo}_template.docx`);
-  const fs = require('fs');
   if (!fs.existsSync(templatePath)) {
     return res.status(404).json({ error: `Plantilla ${tipo} no disponible.` });
   }
@@ -220,6 +247,23 @@ app.get('/api/template/:tipo', (req, res) => {
   }
 });
 
+// Descarga directa de PROD-02 (Solicitud permisos base de datos)
+app.get('/api/formatos/prod02', (req, res) => {
+  const filePath = path.join(__dirname, 'Anexos', 'PROD02_INEI_FORMATO_SOLICITUD_PERMISOS.docx');
+  if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'Formato PROD-02 no disponible.' });
+  res.setHeader('Content-Disposition', 'attachment; filename="PROD02_Solicitud_Permisos_BD_INEI.docx"');
+  res.sendFile(filePath);
+});
+
+// Descarga directa de Formato F-01 (Altas y Bajas)
+app.get('/api/formatos/f01', (req, res) => {
+  const filePath = path.join(__dirname, 'Anexos', 'Formato de Altas y Bajas propuesto V2.xlsx');
+  if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'Formato F-01 no disponible.' });
+  res.setHeader('Content-Disposition', 'attachment; filename="Formato_F01_Altas_Bajas_INEI.xlsx"');
+  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  res.sendFile(filePath);
+});
+
 app.post('/api/ticket-ssi', internalOnly, ticketLimiter, async (req, res) => {
   const { titulo, descripcion, categoria, sede, categoriaId, sedeId } = req.body;
 
@@ -236,13 +280,11 @@ app.post('/api/ticket-ssi', internalOnly, ticketLimiter, async (req, res) => {
   }
 });
 
-// TODO: activar internalOnly cuando se requiera acceso restringido
-app.get('/admin', (req, res) => {
+app.get('/admin', internalOnly, (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'admin.html'));
 });
 
-// TODO: activar internalOnly cuando se requiera acceso restringido
-app.get('/api/metrics', async (req, res) => {
+app.get('/api/metrics', internalOnly, async (req, res) => {
   try {
     const data = await getAllMetrics();
     res.setHeader('Cache-Control', 'no-store');
@@ -262,6 +304,15 @@ async function startServer() {
   app.listen(PORT, () => {
     console.log(`Servidor OTIN Chatbot corriendo en http://localhost:${PORT}`);
   });
+
+  const runCleanup = async () => {
+    try {
+      const deleted = await cleanupOldSessions(90);
+      if (deleted > 0) console.log(`[cleanup] ${deleted} sesiones antiguas eliminadas`);
+    } catch (e) { console.warn('[cleanup] error:', e.message); }
+  };
+  runCleanup();
+  setInterval(runCleanup, 24 * 60 * 60 * 1000);
 }
 
 startServer();
