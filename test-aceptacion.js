@@ -235,7 +235,7 @@ async function ca05(page) {
 async function ca06(page) {
   await resetSession(page);
 
-  for (const msg of ['x', 'y', 'z']) {
+  for (const msg of ['arréglame el ascensor', 'el cafetín no abre', 'necesito hablar con recursos humanos']) {
     await sendMessage(page, msg);
     await waitForBotDone(page);
   }
