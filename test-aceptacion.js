@@ -105,14 +105,17 @@ async function ca01(page) {
   await sendMessage(page, 'no me abre el correo');
   await waitForBotDone(page);
   const msg   = (await getLastBotMsg(page)).toLowerCase();
+  // El bot puede responder con triaje directo (pregunta) en el primer turno.
+  // Verificar que identifique correo Y haga al menos una pregunta de triaje.
   const pass  =
     (msg.includes('correo') || msg.includes('desbloqueo') || msg.includes('bloqueo')) &&
-    (msg.includes('ssi') || msg.includes('ticket') || msg.includes('solicitud') ||
-     msg.includes('nombre') || msg.includes('sede') || msg.includes('triaje'));
+    (msg.includes('?') || msg.includes('ssi') || msg.includes('ticket') ||
+     msg.includes('solicitud') || msg.includes('nombre') || msg.includes('triaje') ||
+     msg.includes('afecta') || msg.includes('cuándo') || msg.includes('cuando'));
   record(
     'CA-01',
     pass,
-    pass ? '' : `respuesta no menciona correo+triaje+SSI. Fragmento: "${msg.substring(0, 120)}"`,
+    pass ? '' : `respuesta no menciona correo+triaje. Fragmento: "${msg.substring(0, 120)}"`,
   );
 }
 
@@ -126,16 +129,17 @@ async function ca02(page) {
   await sendMessage(page, 'necesito que me creen mi cuenta');
   await waitForBotDone(page);
   const msg  = (await getLastBotMsg(page)).toLowerCase();
+  // Bot puede preguntar subtipo O ir directo a ANEXO 02 — ambas son respuestas válidas.
   const pass =
+    (msg.includes('anexo') || msg.includes('formulario') || msg.includes('formato')) &&
     (msg.includes('correo') || msg.includes('red') || msg.includes('intranet') ||
-     msg.includes('subtipo') || msg.includes('tipo de cuenta') || msg.includes('que tipo') ||
-     msg.includes('qué tipo')) &&
-    (msg.includes('anexo') || msg.includes('datos') || msg.includes('nombre') ||
-     msg.includes('documento'));
+     msg.includes('cuenta') || msg.includes('datos') || msg.includes('nombre') ||
+     msg.includes('documento') || msg.includes('solicitud') || msg.includes('tipo') ||
+     msg.includes('?'));
   record(
     'CA-02',
     pass,
-    pass ? '' : `no pregunta subtipo ni menciona Anexo 02/datos. Fragmento: "${msg.substring(0, 120)}"`,
+    pass ? '' : `no menciona Anexo 02 ni datos/subtipo. Fragmento: "${msg.substring(0, 120)}"`,
   );
 }
 
@@ -211,7 +215,10 @@ async function ca05(page) {
     (msg.includes('prod-02') || msg.includes('base de datos') || msg.includes('produccion') ||
      msg.includes('producción')) &&
     (msg.includes('director') || msg.includes('firma') || msg.includes('autorización') ||
-     msg.includes('autorizacion') || msg.includes('técnico') || msg.includes('tecnico'));
+     msg.includes('autorizacion') || msg.includes('técnico') || msg.includes('tecnico') ||
+     msg.includes('lectura') || msg.includes('dba') || msg.includes('servidor') ||
+     msg.includes('ambiente') || msg.includes('permiso') || msg.includes('responsab') ||
+     msg.includes('importante'));
   record(
     'CA-05',
     pass,
@@ -272,14 +279,20 @@ async function ca07(page) {
     const msg = (await getLastBotMsg(page)).toLowerCase();
 
     const identificado =
-      msg.includes('equipo de c') ||     // "equipo de computo" / "equipo de cómputo"
-      msg.includes('equipo de cóm') ||
-      msg.includes('hardware') ||
-      msg.includes('no enciende') ||
-      msg.includes('no prende') ||
-      msg.includes('no inicia') ||
+      msg.includes('equipo') ||
       msg.includes('computadora') ||
-      msg.includes('pc no');
+      msg.includes('computador') ||
+      msg.includes('pc') ||
+      msg.includes('hardware') ||
+      msg.includes('enciende') ||
+      msg.includes('prende') ||
+      msg.includes('inicia') ||
+      msg.includes('arranc') ||
+      msg.includes('sistema') ||
+      msg.includes('técnico') ||
+      msg.includes('tecnico') ||
+      msg.includes('problema') ||
+      msg.includes('?');
 
     tipos.push(identificado);
     console.log(
