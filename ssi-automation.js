@@ -156,19 +156,29 @@ const SEDES = {
   'miraflores': 46, 'sede miraflores': 46, 'lima miraflores': 46,
 };
 
+// Normaliza para comparación: minúsculas + espacios colapsados
+function normalizeText(s) {
+  return (s || '').toLowerCase().replace(/\s+/g, ' ').trim();
+}
+
 function resolveCategoria(nombre) {
-  const key = (nombre || '').toLowerCase().trim();
-  // Coincidencia exacta con los valores del mapa (el bot puede enviar texto SSI exacto)
+  const key = normalizeText(nombre);
+  if (!key) return 'Otros';
+
+  // 1. Coincidencia exacta con los valores del mapa (maneja dobles espacios)
   for (const v of Object.values(CATEGORIAS)) {
-    if (v.toLowerCase() === key) return v;
+    if (normalizeText(v) === key) return v;
   }
-  // Coincidencia exacta de clave
-  if (CATEGORIAS[key]) return CATEGORIAS[key];
-  // Búsqueda parcial
+  // 2. Coincidencia exacta de clave normalizada
   for (const [k, v] of Object.entries(CATEGORIAS)) {
-    if (key.includes(k) || k.includes(key)) return v;
+    if (normalizeText(k) === key) return v;
   }
-  return 'Otros'; // fallback
+  // 3. Parcial: solo si el input CONTIENE la clave (no al revés — evita falsos positivos)
+  for (const [k, v] of Object.entries(CATEGORIAS)) {
+    const kNorm = normalizeText(k);
+    if (key.includes(kNorm)) return v;
+  }
+  return 'Otros';
 }
 
 function resolveSede(nombre) {
@@ -277,18 +287,18 @@ async function crearTicketSSI({ categoria, categoriaId, sede, sedeId, titulo, de
     const allItems = await items.all();
     console.log('[SSI] Items en dropdown:', allItems.length, '| Buscando:', categoriaTexto);
     let categoriaClickeada = false;
-    const catLower = categoriaTexto.toLowerCase();
+    const catNorm = normalizeText(categoriaTexto);
     // Palabras significativas (>= 5 chars) para matching multi-palabra
-    const sigWords = catLower.split(' ').filter(w => w.length >= 5);
+    const sigWords = catNorm.split(' ').filter(w => w.length >= 5);
     for (const item of allItems) {
       const txt = (await item.innerText()).trim();
-      const txtLower = txt.toLowerCase();
-      // Match 1: txt contiene la categoría completa
-      const exactMatch = txtLower === catLower || txtLower.includes(catLower);
-      // Match 2: todas las palabras significativas están en txt (evita falsos positivos de prefijo)
+      const txtNorm = normalizeText(txt);
+      // Match 1: normalizados iguales, o uno contiene al otro (espacios colapsados)
+      const exactMatch = txtNorm === catNorm || txtNorm.includes(catNorm) || catNorm.includes(txtNorm);
+      // Match 2: todas las palabras significativas presentes en el ítem
       const wordsMatch = sigWords.length >= 2
-        ? sigWords.every(w => txtLower.includes(w))
-        : sigWords.length === 1 && txtLower.includes(catLower.substring(0, Math.min(catLower.length, 12)));
+        ? sigWords.every(w => txtNorm.includes(w))
+        : sigWords.length === 1 && txtNorm.includes(catNorm.substring(0, Math.min(catNorm.length, 12)));
       if (exactMatch || wordsMatch) {
         console.log('[SSI] Categoría seleccionada:', txt);
         await item.click();
@@ -297,9 +307,18 @@ async function crearTicketSSI({ categoria, categoriaId, sede, sedeId, titulo, de
       }
     }
     if (!categoriaClickeada && allItems.length > 0) {
-      const fallbackTxt = await allItems[1].innerText().catch(() => '?');
-      console.log('[SSI] Fallback — primer ítem:', fallbackTxt);
-      await allItems[1].click();
+      // Fallback seguro: buscar "Otros" explícitamente — nunca un ítem aleatorio
+      let otrosItem = null;
+      for (const item of allItems) {
+        const txt = normalizeText(await item.innerText().catch(() => ''));
+        if (txt === 'otros' || txt.startsWith('otros')) { otrosItem = item; break; }
+      }
+      if (otrosItem) {
+        console.warn(`[SSI] Categoría "${categoriaTexto}" no encontrada — usando Otros`);
+        await otrosItem.click();
+      } else {
+        console.warn(`[SSI] Categoría "${categoriaTexto}" no encontrada y "Otros" tampoco disponible en dropdown`);
+      }
     }
     await page.waitForTimeout(2000); // crítico: jQuery UI necesita este tiempo para fijar estado interno
 
