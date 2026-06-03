@@ -39,6 +39,10 @@ async function handleCreateSSITicket({ titulo, descripcion, categoria, categoria
 }
 
 function handleDownloadTemplate({ tipo }) {
+  const allowed = ['ANEXO01', 'ANEXO02', 'ANEXO03', 'ANEXO04', 'PROD02', 'F01'];
+  if (!allowed.includes(tipo)) {
+    return { ok: false, error: `Tipo no válido: ${tipo}` };
+  }
   return { ok: true, tipo };
 }
 

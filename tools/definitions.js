@@ -34,13 +34,13 @@ const toolDeclarations = [
   },
   {
     name: 'download_template',
-    description: 'Ofrece la descarga de una plantilla en blanco para completar manualmente.',
+    description: 'Ofrece la descarga de una plantilla en blanco para completar manualmente. PROD02=Solicitud acceso BD, F01=Altas y Bajas sistemas.',
     parameters: {
       type: 'OBJECT',
       properties: {
         tipo: {
           type: 'STRING',
-          enum: ['ANEXO01', 'ANEXO02', 'ANEXO03', 'ANEXO04'],
+          enum: ['ANEXO01', 'ANEXO02', 'ANEXO03', 'ANEXO04', 'PROD02', 'F01'],
         },
       },
       required: ['tipo'],
