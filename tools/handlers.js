@@ -9,7 +9,7 @@ async function handleGenerateDocument({ tipo, datos }) {
   return { ok: true, tipo, datos };
 }
 
-const SSI_TIMEOUT_MS = 120_000; // 2 min — Playwright + navegación SSI
+const SSI_TIMEOUT_MS = 180_000; // 3 min — Playwright + navegación SSI (login + modal check)
 
 async function handleCreateSSITicket({ titulo, descripcion, categoria, categoriaId, sede, sedeId }, sessionId) {
   const timeoutPromise = new Promise((_, reject) =>

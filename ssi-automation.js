@@ -220,7 +220,7 @@ async function crearTicketSSI({ categoria, categoriaId, sede, sedeId, titulo, de
   const browser = await chromium.launch({
     headless: process.env.PLAYWRIGHT_HEADLESS === 'true', // headful por defecto (INEI requiere GUI)
     slowMo: 300,     // necesario para que jQuery UI procese los eventos del dropdown
-    args: ['--disable-blink-features=AutomationControlled', '--start-maximized'],
+    args: ['--disable-blink-features=AutomationControlled'],
   });
 
   try {
@@ -237,6 +237,8 @@ async function crearTicketSSI({ categoria, categoriaId, sede, sedeId, titulo, de
       ...(storageState ? { storageState } : {}),
     });
     const page = await ctx.newPage();
+    browser.on('disconnected', () => console.error('[SSI] ⚠️  browser desconectado inesperadamente'));
+    page.on('close', () => console.error('[SSI] ⚠️  page cerrada inesperadamente'));
 
     // Navegar a Nueva Atención — si redirige al login, hacer login
     await page.goto('https://webapp.inei.gob.pe/ssi/Admin/Atencion_tecnico', {
@@ -356,7 +358,7 @@ async function crearTicketSSI({ categoria, categoriaId, sede, sedeId, titulo, de
     for (const sel of confirmSelectors) {
       try {
         const btn = page.locator(sel).first();
-        const visible = await btn.isVisible({ timeout: 800 }).catch(() => false);
+        const visible = await btn.isVisible({ timeout: 300 }).catch(() => false);
         if (visible) {
           await btn.click();
           modalClicked = true;
