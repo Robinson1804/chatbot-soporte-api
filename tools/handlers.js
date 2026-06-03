@@ -2,7 +2,7 @@ const { crearTicketSSI } = require('../ssi-automation');
 const { saveEvent } = require('../db/queries');
 
 async function handleGenerateDocument({ tipo, datos }) {
-  const allowed = ['ANEXO01', 'ANEXO02', 'ANEXO03', 'ANEXO04'];
+  const allowed = ['ANEXO01', 'ANEXO02', 'ANEXO03', 'ANEXO04', 'ANEXO07'];
   if (!allowed.includes(tipo)) {
     return { ok: false, error: `Tipo no válido: ${tipo}` };
   }
@@ -39,7 +39,7 @@ async function handleCreateSSITicket({ titulo, descripcion, categoria, categoria
 }
 
 function handleDownloadTemplate({ tipo }) {
-  const allowed = ['ANEXO01', 'ANEXO02', 'ANEXO03', 'ANEXO04', 'PROD02', 'F01'];
+  const allowed = ['ANEXO01', 'ANEXO02', 'ANEXO03', 'ANEXO04', 'PROD02', 'F01', 'ANEXO07'];
   if (!allowed.includes(tipo)) {
     return { ok: false, error: `Tipo no válido: ${tipo}` };
   }

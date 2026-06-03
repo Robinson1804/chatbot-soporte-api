@@ -172,9 +172,25 @@ async function getTicketsPorSede() {
   return res.rows;
 }
 
+// 11. Escalamientos a soporte humano (ultimos 30 dias)
+async function getEscalamientos() {
+  const res = await pool.query(`
+    SELECT
+      COUNT(*)::int AS total_30d,
+      COUNT(*) FILTER (
+        WHERE (created_at AT TIME ZONE 'America/Lima')::date
+              = (NOW() AT TIME ZONE 'America/Lima')::date
+      )::int AS hoy
+    FROM events
+    WHERE tipo = 'escalamiento'
+      AND created_at >= NOW() - INTERVAL '30 days'
+  `);
+  return res.rows[0];
+}
+
 // Wrapper agregador con tolerancia a fallos parciales
 async function getAllMetrics() {
-  const [r1, r2, r3, r4, r5, r6, r7, r8, r9, r10] = await Promise.allSettled([
+  const [r1, r2, r3, r4, r5, r6, r7, r8, r9, r10, r11] = await Promise.allSettled([
     sesionesPorDia(),
     promedioMensajesPorSesion(),
     mensajesPorHora(),
@@ -185,6 +201,7 @@ async function getAllMetrics() {
     getDocumentosPorDia(),
     getTicketsPorCategoria(),
     getTicketsPorSede(),
+    getEscalamientos(),
   ]);
   const val = (r) => (r.status === 'fulfilled' ? r.value : null);
   const kpis = val(r7) || {};
@@ -210,6 +227,7 @@ async function getAllMetrics() {
       porSede: val(r10),
     },
     urgencias: val(r6),
+    escalamientos: val(r11) || { total_30d: 0, hoy: 0 },
     generatedAt: new Date().toISOString(),
   };
 }

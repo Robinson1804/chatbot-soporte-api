@@ -7,8 +7,8 @@ const toolDeclarations = [
       properties: {
         tipo: {
           type: 'STRING',
-          enum: ['ANEXO01', 'ANEXO02', 'ANEXO03', 'ANEXO04'],
-          description: 'Tipo de documento a generar',
+          enum: ['ANEXO01', 'ANEXO02', 'ANEXO03', 'ANEXO04', 'ANEXO07'],
+          description: 'Tipo de documento a generar. ANEXO07=Transferencia de información entre áreas.',
         },
         datos: {
           type: 'OBJECT',
@@ -40,7 +40,7 @@ const toolDeclarations = [
       properties: {
         tipo: {
           type: 'STRING',
-          enum: ['ANEXO01', 'ANEXO02', 'ANEXO03', 'ANEXO04', 'PROD02', 'F01'],
+          enum: ['ANEXO01', 'ANEXO02', 'ANEXO03', 'ANEXO04', 'PROD02', 'F01', 'ANEXO07'],
         },
       },
       required: ['tipo'],

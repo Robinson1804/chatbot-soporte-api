@@ -1006,4 +1006,68 @@ async function generateAnexo04(d) {
   return Packer.toBuffer(doc);
 }
 
-module.exports = { generateAnexo01, generateAnexo02, generateAnexo03, generateAnexo04 };
+// ═════════════════════════════════════════════════════════════════════════════
+// ANEXO 07 — Transferencia de Información entre Áreas
+// ═════════════════════════════════════════════════════════════════════════════
+async function generateAnexo07(d) {
+  d = d || {};
+  const hoy = d.fechaSolicitud || new Date().toLocaleDateString('es-PE');
+
+  const children = [];
+
+  children.push(anexoHeader('Transferencia de Información entre Áreas', 'ANEXO 07'));
+  children.push(...spacer(1));
+
+  children.push(sectionTitle('Área Origen'));
+  children.push(
+    sectionTable([
+      sectionRow('Área / Dirección', d.areaOrigen || ''),
+      sectionRow('Jefe de Área Origen', d.jefeOrigen || ''),
+      sectionRow('Responsable Origen', d.responsableOrigen || ''),
+    ])
+  );
+  children.push(...spacer(1));
+
+  children.push(sectionTitle('Área Destino'));
+  children.push(
+    sectionTable([
+      sectionRow('Área / Dirección', d.areaDestino || ''),
+      sectionRow('Jefe de Área Destino', d.jefeDestino || ''),
+      sectionRow('Responsable Destino', d.responsableDestino || ''),
+    ])
+  );
+  children.push(...spacer(1));
+
+  children.push(sectionTitle('Detalle de la Transferencia'));
+  children.push(
+    sectionTable([
+      sectionRow('Descripción de la información', d.descripcion || ''),
+      sectionRow('Justificación', d.justificacion || ''),
+      multiFieldRow([
+        { label: 'Período — Inicio', value: d.periodoInicio || '' },
+        { label: 'Período — Fin', value: d.periodoFin || '' },
+      ]),
+      sectionRow('Fecha de solicitud', hoy),
+    ])
+  );
+  children.push(...spacer(2));
+
+  children.push(signatureBlock(
+    `Firma del Jefe de Área Origen${d.jefeOrigen ? ' — ' + d.jefeOrigen : ''}`,
+    'Jefe de Área Origen'
+  ));
+  children.push(...spacer(1));
+  children.push(signatureBlock(
+    `Firma del Jefe de Área Destino${d.jefeDestino ? ' — ' + d.jefeDestino : ''}`,
+    'Jefe de Área Destino'
+  ));
+
+  const doc = new Document({
+    styles: { default: { document: { run: { font: 'Calibri', size: 20 } } } },
+    sections: [{ properties: { page: { margin: PAGE_MARGINS } }, children }],
+  });
+
+  return Packer.toBuffer(doc);
+}
+
+module.exports = { generateAnexo01, generateAnexo02, generateAnexo03, generateAnexo04, generateAnexo07 };

@@ -456,7 +456,7 @@ REGLAS IMPORTANTES:
 1. NUNCA llamés generate_document sin antes confirmar los datos con el usuario.
 2. La fecha de solicitud usa la fecha actual si el usuario no la menciona.
 3. Si el usuario solo quiere orientación, NO llamés generate_document.
-4. Ofrece la generación para los 4 ANEXOS (01, 02, 03 y 04).
+4. Ofrece la generación para los ANEXOS 01, 02, 03, 04 y 07.
 5. Para FORMATO F-01 y FORMATO PROD-02 también ofrecé descarga de plantilla. Cuando el usuario necesite uno de estos formatos, incluí la opción "Descargar plantilla en blanco" en show_chips y llamá download_template con tipo 'F01' o 'PROD02' según corresponda. Estos formatos NO tienen generación automática pre-completada — solo descarga de plantilla en blanco más orientación paso a paso sobre qué datos completar.
 
 ## CREACIÓN AUTOMÁTICA DE TICKET EN SSI

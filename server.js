@@ -4,7 +4,7 @@ const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
-const { generateAnexo01, generateAnexo02, generateAnexo03, generateAnexo04 } = require('./generators');
+const { generateAnexo01, generateAnexo02, generateAnexo03, generateAnexo04, generateAnexo07 } = require('./generators');
 const { crearTicketSSI } = require('./ssi-automation');
 const { chatLimiter, generateLimiter, ticketLimiter } = require('./middleware/rateLimiter');
 const internalOnly = require('./middleware/internalOnly');
@@ -155,6 +155,7 @@ app.post('/api/generate', generateLimiter, async (req, res) => {
     ANEXO02: ['nombres', 'cargo', 'direccion', 'sede', 'tipoSolicitud'],
     ANEXO03: ['area', 'jefeArea', 'usuarioSolicitante', 'proposito'],
     ANEXO04: ['nombres', 'cargo', 'recurso', 'justificacion'],
+    ANEXO07: ['areaOrigen', 'areaDestino', 'descripcion'],
   };
 
   const missing = (REQUIRED[tipo] || []).filter(f => !datos[f]);
@@ -179,6 +180,9 @@ app.post('/api/generate', generateLimiter, async (req, res) => {
     } else if (tipo === 'ANEXO04') {
       docBuffer = await generateAnexo04(datos);
       filename = `ANEXO04_${safeName}.docx`;
+    } else if (tipo === 'ANEXO07') {
+      docBuffer = await generateAnexo07(datos);
+      filename = `ANEXO07_${safeName}.docx`;
     } else {
       return res.status(400).json({ error: `Tipo de documento no soportado: ${tipo}` });
     }
@@ -193,7 +197,7 @@ app.post('/api/generate', generateLimiter, async (req, res) => {
   }
 });
 
-app.get('/api/template/:tipo', (req, res) => {
+app.get('/api/template/:tipo', async (req, res) => {
   const { tipo } = req.params;
 
   // PROD02 y F01 se sirven directo desde Anexos/
@@ -209,6 +213,19 @@ app.get('/api/template/:tipo', (req, res) => {
     res.setHeader('Content-Disposition', 'attachment; filename="Formato_F01_Altas_Bajas_INEI.xlsx"');
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     return res.sendFile(filePath);
+  }
+
+  // ANEXO07 no tiene template estático — se genera desde el constructor
+  if (tipo === 'ANEXO07') {
+    try {
+      const buffer = await generateAnexo07({});
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+      res.setHeader('Content-Disposition', 'attachment; filename="ANEXO07_Transferencia_Info_INEI.docx"');
+      res.setHeader('Content-Length', buffer.length);
+      return res.send(buffer);
+    } catch (err) {
+      return res.status(500).json({ error: 'No se pudo generar la plantilla ANEXO07.' });
+    }
   }
 
   const allowed = ['ANEXO01', 'ANEXO02', 'ANEXO03', 'ANEXO04'];
