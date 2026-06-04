@@ -555,16 +555,22 @@ function loadHistory() {
 /* ============================================================
    FORMULARIO INLINE EN EL CHAT
    ============================================================ */
+/* IDs de campo que ocupan columna completa en el grid de 2 columnas */
+const FULL_WIDTH_IDS = ['nombres', 'direccion', 'justificacion', 'numeroOS', 'correo', 'correoInstitucional', 'telefono', 'tipoSolicitud'];
+
 function renderForm({ titulo, campos }, triggerRow) {
   const formId = 'form-' + Date.now();
 
   const fieldsHtml = campos.map((campo) => {
+    const isFullWidth = FULL_WIDTH_IDS.includes(campo.id) || campo.tipo === 'select';
+    const fieldClass = `form-field${isFullWidth ? ' full-width' : ''}`;
+
     if (campo.tipo === 'select' && campo.opciones?.length) {
       const opts = campo.opciones
         .map((o) => `<option value="${o}">${o}</option>`)
         .join('');
       return `
-        <div class="form-field">
+        <div class="${fieldClass}">
           <label for="${formId}-${campo.id}">${campo.label}${campo.requerido ? ' <span class="required">*</span>' : ''}</label>
           <select id="${formId}-${campo.id}" name="${campo.id}" ${campo.requerido ? 'required' : ''}>
             <option value="">Seleccionar...</option>
@@ -573,7 +579,7 @@ function renderForm({ titulo, campos }, triggerRow) {
         </div>`;
     }
     return `
-      <div class="form-field">
+      <div class="${fieldClass}">
         <label for="${formId}-${campo.id}">${campo.label}${campo.requerido ? ' <span class="required">*</span>' : ''}</label>
         <input
           type="${campo.tipo === 'date' ? 'date' : campo.tipo === 'number' ? 'number' : 'text'}"
@@ -590,7 +596,7 @@ function renderForm({ titulo, campos }, triggerRow) {
       <div class="chat-form-title">${titulo}</div>
       <div class="chat-form-fields">${fieldsHtml}</div>
       <button class="chat-form-submit" onclick="submitChatForm('${formId}')">
-        Registrar
+        ✓ Registrar
       </button>
     </div>`;
 

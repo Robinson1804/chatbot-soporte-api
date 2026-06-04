@@ -560,102 +560,139 @@ html, body {
 .urgency-p3 { background: #EFF6FF; color: #1E40AF; border: 1px solid #BFDBFE; }
 .urgency-p4 { background: #F1F5F9; color: #475569; border: 1px solid #E2E8F0; }
 
-/* ============================================================
-   FORMULARIO INLINE EN EL CHAT
-   ============================================================ */
+/* ─── Formulario inline en el chat ─────────────────────────── */
 .chat-form-card {
   background: #ffffff;
   border: 1px solid #e2e8f0;
+  border-top: 3px solid #1d4ed8;
   border-radius: 12px;
-  padding: 16px;
-  margin: 4px 0;
-  max-width: 380px;
-  box-shadow: 0 2px 8px rgba(0,0,0,.08);
+  padding: 16px 16px 14px;
+  margin: 2px 0 4px;
+  max-width: 420px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.10);
+  font-family: inherit;
 }
 
 .chat-form-title {
-  font-weight: 600;
-  font-size: 14px;
+  font-weight: 700;
+  font-size: 13px;
   color: #1e40af;
-  margin-bottom: 12px;
-  padding-bottom: 8px;
-  border-bottom: 1px solid #e2e8f0;
+  margin-bottom: 14px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.chat-form-title::before {
+  content: '📋';
+  font-size: 14px;
 }
 
 .chat-form-fields {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px 12px;
   margin-bottom: 14px;
+}
+
+/* Campos que ocupan columna completa */
+.form-field.full-width {
+  grid-column: 1 / -1;
 }
 
 .form-field {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 3px;
 }
 
 .form-field label {
-  font-size: 12px;
-  font-weight: 500;
-  color: #475569;
+  font-size: 11px;
+  font-weight: 600;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.form-field .required {
+  color: #ef4444;
+  margin-left: 2px;
 }
 
 .form-field input,
 .form-field select {
-  padding: 8px 10px;
-  border: 1px solid #cbd5e1;
-  border-radius: 8px;
+  padding: 7px 10px;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 7px;
   font-size: 13px;
   color: #1e293b;
+  background: #f8fafc;
   outline: none;
-  transition: border-color .2s;
+  transition: border-color 0.15s, background 0.15s;
+  width: 100%;
+  box-sizing: border-box;
   font-family: var(--font);
-  background: #fff;
 }
 
 .form-field input:focus,
 .form-field select:focus {
   border-color: #3b82f6;
-  box-shadow: 0 0 0 2px rgba(59,130,246,.15);
+  background: #fff;
+  box-shadow: 0 0 0 3px rgba(59,130,246,0.12);
 }
 
 .form-field input.field-error,
 .form-field select.field-error {
   border-color: #ef4444;
+  background: #fff5f5;
 }
 
-.form-field .required {
-  color: #ef4444;
+.form-field input::placeholder {
+  color: #94a3b8;
+  font-size: 12px;
 }
 
 .chat-form-submit {
   width: 100%;
-  padding: 9px;
-  background: #1d4ed8;
-  color: #fff;
+  padding: 10px;
+  background: linear-gradient(135deg, #1d4ed8 0%, #2563eb 100%);
+  color: white;
   border: none;
   border-radius: 8px;
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 700;
   font-family: var(--font);
   cursor: pointer;
-  transition: background .2s;
+  letter-spacing: 0.03em;
+  transition: opacity 0.2s, transform 0.1s;
 }
 
-.chat-form-submit:hover:not(:disabled) {
-  background: #1e40af;
+.chat-form-submit:hover {
+  opacity: 0.92;
+  transform: translateY(-1px);
+}
+
+.chat-form-submit:active {
+  transform: translateY(0);
 }
 
 .chat-form-submit:disabled {
-  background: #64748b;
+  background: #94a3b8;
   cursor: default;
+  transform: none;
+  opacity: 1;
 }
 
 .message-row.form-message {
-  align-items: flex-start;
+  justify-content: flex-start;
 }
 
 @media (max-width: 600px) {
-  .chat-form-card { max-width: 100%; }
+  .chat-form-card {
+    max-width: 100%;
+  }
+  .chat-form-fields {
+    grid-template-columns: 1fr;
+  }
 }
+/* ──────────────────────────────────────────────────────────── */
