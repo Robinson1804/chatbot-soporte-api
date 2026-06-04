@@ -296,14 +296,21 @@ function simpleMarkdown(text) {
   html = html.replace(/^## (.+)$/gm, '<strong>$1</strong>');
   html = html.replace(/^# (.+)$/gm, '<strong>$1</strong>');
 
-  /* Listas con guión o asterisco */
-  html = html.replace(/^[-*] (.+)$/gm, '<li>$1</li>');
-  /* Colapsar líneas en blanco entre items para que queden en un solo <ul> */
-  html = html.replace(/(<\/li>)\n\n(<li>)/g, '$1\n$2');
-  html = html.replace(/(<li>.*<\/li>(\n|$))+/g, (match) => `<ul>${match}</ul>`);
+  /* Listas: marcamos el tipo antes de envolver para no confundir los regex */
+  html = html.replace(/^[-*] (.+)$/gm, '<li data-ul>$1</li>');
+  html = html.replace(/^\d+\. (.+)$/gm, '<li data-ol>$1</li>');
 
-  /* Listas numeradas */
-  html = html.replace(/^\d+\. (.+)$/gm, '<li>$1</li>');
+  /* Colapsar líneas en blanco entre items del mismo tipo */
+  html = html.replace(/(<\/li>)\n\n(<li)/g, '$1\n$2');
+
+  /* Envolver bloques contiguos de <li data-ul> en <ul> */
+  html = html.replace(/(<li data-ul>.*<\/li>(\n|$))+/g, (match) => `<ul>${match}</ul>`);
+
+  /* Envolver bloques contiguos de <li data-ol> en <ol> */
+  html = html.replace(/(<li data-ol>.*<\/li>(\n|$))+/g, (match) => `<ol>${match}</ol>`);
+
+  /* Eliminar los atributos temporales data-ul / data-ol */
+  html = html.replace(/<li data-ul>/g, '<li>').replace(/<li data-ol>/g, '<li>');
 
   /* Líneas en blanco → párrafos */
   const paragraphs = html.split(/\n{2,}/);
@@ -311,7 +318,7 @@ function simpleMarkdown(text) {
     .map((p) => {
       const trimmed = p.trim();
       if (!trimmed) return '';
-      if (trimmed.startsWith('<ul>') || trimmed.startsWith('<li>') || trimmed.startsWith('<strong>')) {
+      if (trimmed.startsWith('<ul>') || trimmed.startsWith('<ol>') || trimmed.startsWith('<li>') || trimmed.startsWith('<strong>')) {
         return trimmed;
       }
       /* Saltos de línea dentro del párrafo */
