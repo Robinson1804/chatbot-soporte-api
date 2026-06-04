@@ -173,6 +173,11 @@ function handleActionEvent(action, payload, rowEl, bubbleEl) {
         renderChips(payload.opciones, rowEl);
       }
       break;
+    case 'show_form':
+      if (payload.ok && payload.titulo && payload.campos?.length) {
+        renderForm(payload, rowEl);
+      }
+      break;
   }
 }
 
@@ -546,3 +551,93 @@ function loadHistory() {
     if (saved) history = JSON.parse(saved);
   } catch {}
 }
+
+/* ============================================================
+   FORMULARIO INLINE EN EL CHAT
+   ============================================================ */
+function renderForm({ titulo, campos }, triggerRow) {
+  const formId = 'form-' + Date.now();
+
+  const fieldsHtml = campos.map((campo) => {
+    if (campo.tipo === 'select' && campo.opciones?.length) {
+      const opts = campo.opciones
+        .map((o) => `<option value="${o}">${o}</option>`)
+        .join('');
+      return `
+        <div class="form-field">
+          <label for="${formId}-${campo.id}">${campo.label}${campo.requerido ? ' <span class="required">*</span>' : ''}</label>
+          <select id="${formId}-${campo.id}" name="${campo.id}" ${campo.requerido ? 'required' : ''}>
+            <option value="">Seleccionar...</option>
+            ${opts}
+          </select>
+        </div>`;
+    }
+    return `
+      <div class="form-field">
+        <label for="${formId}-${campo.id}">${campo.label}${campo.requerido ? ' <span class="required">*</span>' : ''}</label>
+        <input
+          type="${campo.tipo === 'date' ? 'date' : campo.tipo === 'number' ? 'number' : 'text'}"
+          id="${formId}-${campo.id}"
+          name="${campo.id}"
+          placeholder="${campo.placeholder || ''}"
+          ${campo.requerido ? 'required' : ''}
+        >
+      </div>`;
+  }).join('');
+
+  const formHtml = `
+    <div class="chat-form-card" id="${formId}">
+      <div class="chat-form-title">${titulo}</div>
+      <div class="chat-form-fields">${fieldsHtml}</div>
+      <button class="chat-form-submit" onclick="submitChatForm('${formId}')">
+        Registrar
+      </button>
+    </div>`;
+
+  const msgDiv = document.createElement('div');
+  msgDiv.className = 'message-row bot form-message';
+  msgDiv.innerHTML = formHtml;
+
+  if (triggerRow && triggerRow.parentNode === messagesEl) {
+    triggerRow.insertAdjacentElement('afterend', msgDiv);
+  } else {
+    messagesEl.appendChild(msgDiv);
+  }
+
+  scrollToBottom();
+}
+
+function submitChatForm(formId) {
+  const card = document.getElementById(formId);
+  if (!card) return;
+
+  const fields = card.querySelectorAll('input, select');
+  const data = {};
+  let valid = true;
+
+  fields.forEach((f) => {
+    if (f.required && !f.value.trim()) {
+      f.classList.add('field-error');
+      valid = false;
+    } else {
+      f.classList.remove('field-error');
+      data[f.name] = f.value.trim();
+    }
+  });
+
+  if (!valid) return;
+
+  // Formatear los datos como mensaje legible
+  const mensaje = Object.entries(data)
+    .map(([k, v]) => `${k}: ${v}`)
+    .join('\n');
+
+  // Deshabilitar el formulario para que no se pueda reenviar
+  card.querySelectorAll('input, select, button').forEach((el) => el.disabled = true);
+  card.querySelector('.chat-form-submit').textContent = 'Enviado';
+
+  sendMessage(mensaje);
+}
+
+// Exponer para uso desde atributos onclick en el HTML del formulario
+window.submitChatForm = submitChatForm;

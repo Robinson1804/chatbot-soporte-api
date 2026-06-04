@@ -72,6 +72,36 @@ const toolDeclarations = [
       required: ['opciones'],
     },
   },
+  {
+    name: 'show_form',
+    description: 'Muestra un formulario inline en el chat para que el usuario complete datos estructurados. Usar cuando se necesiten varios campos de datos del usuario (ej. para generar un anexo). El usuario completa el formulario y hace click en Registrar.',
+    parameters: {
+      type: 'OBJECT',
+      properties: {
+        titulo: {
+          type: 'STRING',
+          description: 'Título del formulario, ej. "Datos para ANEXO 02"',
+        },
+        campos: {
+          type: 'ARRAY',
+          description: 'Lista de campos del formulario',
+          items: {
+            type: 'OBJECT',
+            properties: {
+              id:          { type: 'STRING',  description: 'Identificador único del campo' },
+              label:       { type: 'STRING',  description: 'Etiqueta visible del campo' },
+              placeholder: { type: 'STRING',  description: 'Texto de ayuda dentro del input' },
+              tipo:        { type: 'STRING',  description: 'Tipo: text, date, select, number' },
+              opciones:    { type: 'ARRAY',   items: { type: 'STRING' }, description: 'Opciones para tipo select' },
+              requerido:   { type: 'BOOLEAN', description: 'Si el campo es obligatorio' },
+            },
+            required: ['id', 'label', 'tipo'],
+          },
+        },
+      },
+      required: ['titulo', 'campos'],
+    },
+  },
 ];
 
 module.exports = toolDeclarations;

@@ -54,10 +54,15 @@ function handleShowChips({ opciones }) {
   return { ok: true, opciones };
 }
 
+function handleShowForm({ titulo, campos }) {
+  return { ok: true, titulo, campos };
+}
+
 module.exports = {
   generate_document:  handleGenerateDocument,
   create_ssi_ticket:  handleCreateSSITicket,
   download_template:  handleDownloadTemplate,
   set_urgency:        handleSetUrgency,
   show_chips:         handleShowChips,
+  show_form:          handleShowForm,
 };
