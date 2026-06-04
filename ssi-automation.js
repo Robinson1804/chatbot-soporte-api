@@ -219,7 +219,7 @@ async function login(page, ctx) {
 async function crearTicketSSI({ categoria, categoriaId, sede, sedeId, titulo, descripcion }) {
   const browser = await chromium.launch({
     headless: process.env.PLAYWRIGHT_HEADLESS === 'true', // headful por defecto (INEI requiere GUI)
-    slowMo: 300,     // necesario para que jQuery UI procese los eventos del dropdown
+    slowMo: 150,     // reducido: la búsqueda filtra antes de iterar, menos espera necesaria
     args: ['--disable-blink-features=AutomationControlled'],
   });
 
@@ -258,7 +258,7 @@ async function crearTicketSSI({ categoria, categoriaId, sede, sedeId, titulo, de
 
     // Esperar que jQuery UI combobox esté inicializado antes de interactuar
     await page.waitForSelector('input.custom-combobox-input', { state: 'visible', timeout: 15000 });
-    await page.waitForTimeout(2000);
+    await page.waitForTimeout(2000).catch(() => {});
 
     // ── Sede: SELECT oculto por Select2 — funciona con evaluate ──────────
     await page.evaluate((sId) => {
@@ -274,42 +274,63 @@ async function crearTicketSSI({ categoria, categoriaId, sede, sedeId, titulo, de
     await page.waitForFunction(() => {
       const sel = document.getElementById('categorias');
       return sel && sel.options.length > 5;
-    }, null, { timeout: 10000 });
+    }, null, { timeout: 10000 }).catch(() => {});
 
-    // ── Categoría via toggle + clic en ítem del dropdown ─────────────────
+    // ── Categoría via tipo en input del combobox + clic en ítem filtrado ────
     // page.selectOption() y evaluate NO actualizan el estado interno de jQuery UI.
     // El SSI valida desde ese estado interno — si no coincide, el submit falla con HTTP 500.
-    // toggle+click es el único approach confirmado funcional (ticket #112628 creado con test-ssi-solo.js).
+    // Estrategia: tipear las primeras palabras en el input para filtrar el dropdown
+    // de 215 → pocos ítems, luego hacer clic. Esto evita iterar todos los ítems (lento).
     await page.bringToFront();
-    const toggleBtn = page.locator('.custom-combobox-toggle').first();
-    await toggleBtn.click();
-    await page.waitForTimeout(1500);
-
-    const items = page.locator('.ui-autocomplete li.ui-menu-item');
-    const allItems = await items.all();
-    console.log('[SSI] Items en dropdown:', allItems.length, '| Buscando:', categoriaTexto);
-    let categoriaClickeada = false;
+    const catInput = page.locator('input.custom-combobox-input').first();
     const catNorm = normalizeText(categoriaTexto);
+    // Usar las primeras 2 palabras significativas como filtro de búsqueda
+    const searchWords = catNorm.split(' ').filter(w => w.length >= 3);
+    const searchTerm = searchWords.slice(0, 2).join(' ');
+    console.log('[SSI] Buscando categoría:', categoriaTexto, '| término de búsqueda:', searchTerm);
+
+    await catInput.click({ clickCount: 3 });
+    await catInput.type(searchTerm, { delay: 80 });
+    // Esperar que el dropdown filtre y muestre resultados
+    await page.waitForTimeout(1200).catch(() => {});
+
+    let categoriaClickeada = false;
+    const items = page.locator('.ui-autocomplete li.ui-menu-item');
     // Palabras significativas (>= 5 chars) para matching multi-palabra
     const sigWords = catNorm.split(' ').filter(w => w.length >= 5);
-    for (const item of allItems) {
-      const txt = (await item.innerText()).trim();
-      const txtNorm = normalizeText(txt);
-      // Match 1: normalizados iguales, o uno contiene al otro (espacios colapsados)
-      const exactMatch = txtNorm === catNorm || txtNorm.includes(catNorm) || catNorm.includes(txtNorm);
-      // Match 2: todas las palabras significativas presentes en el ítem
-      const wordsMatch = sigWords.length >= 2
-        ? sigWords.every(w => txtNorm.includes(w))
-        : sigWords.length === 1 && txtNorm.includes(catNorm.substring(0, Math.min(catNorm.length, 12)));
-      if (exactMatch || wordsMatch) {
-        console.log('[SSI] Categoría seleccionada:', txt);
-        await item.click();
-        categoriaClickeada = true;
-        break;
+
+    // Intentar hasta 2 veces: primero con búsqueda filtrada, luego con toggle si no aparece
+    for (let attempt = 0; attempt < 2 && !categoriaClickeada; attempt++) {
+      const allItems = await items.all();
+      console.log(`[SSI] Items visibles: ${allItems.length} (intento ${attempt + 1})`);
+      for (const item of allItems) {
+        const txt = (await item.innerText()).trim();
+        const txtNorm = normalizeText(txt);
+        const exactMatch = txtNorm === catNorm || txtNorm.includes(catNorm) || catNorm.includes(txtNorm);
+        const wordsMatch = sigWords.length >= 2
+          ? sigWords.every(w => txtNorm.includes(w))
+          : sigWords.length === 1 && txtNorm.includes(catNorm.substring(0, Math.min(catNorm.length, 12)));
+        if (exactMatch || wordsMatch) {
+          console.log('[SSI] Categoría seleccionada:', txt);
+          await item.click();
+          categoriaClickeada = true;
+          break;
+        }
+      }
+      if (!categoriaClickeada && attempt === 0) {
+        // Fallback: abrir todo el dropdown y buscar sin filtro
+        console.log('[SSI] Categoría no encontrada con búsqueda — abriendo dropdown completo');
+        await catInput.click({ clickCount: 3 });
+        await catInput.fill('');
+        const toggleBtn = page.locator('.custom-combobox-toggle').first();
+        await toggleBtn.click();
+        await page.waitForTimeout(1500).catch(() => {});
       }
     }
-    if (!categoriaClickeada && allItems.length > 0) {
+
+    if (!categoriaClickeada) {
       // Fallback seguro: buscar "Otros" explícitamente — nunca un ítem aleatorio
+      const allItems = await items.all();
       let otrosItem = null;
       for (const item of allItems) {
         const txt = normalizeText(await item.innerText().catch(() => ''));
@@ -322,21 +343,21 @@ async function crearTicketSSI({ categoria, categoriaId, sede, sedeId, titulo, de
         console.warn(`[SSI] Categoría "${categoriaTexto}" no encontrada y "Otros" tampoco disponible en dropdown`);
       }
     }
-    await page.waitForTimeout(2000); // crítico: jQuery UI necesita este tiempo para fijar estado interno
+    await page.waitForTimeout(1500).catch(() => {}); // jQuery UI necesita tiempo para fijar estado interno
 
     // ── Título y descripción DESPUÉS de la categoría ─────────────────────
     // Si se llenan antes, el blur del #titulo dispara el handler de jQuery UI que resetea el combobox.
-    await page.fill('#titulo', titulo.substring(0, 150));
-    await page.fill('#descripcion_incidencia', descripcion);
-    await page.waitForTimeout(300);
+    await page.fill('#titulo', titulo.substring(0, 150)).catch(() => {});
+    await page.fill('#descripcion_incidencia', descripcion).catch(() => {});
+    await page.waitForTimeout(300).catch(() => {});
 
-    await page.screenshot({ path: path.join(__dirname, '.ssi-before-submit.png') });
+    await page.screenshot({ path: path.join(__dirname, '.ssi-before-submit.png') }).catch(() => {});
 
     // ── Enviar ─────────────────────────────────────────────────────────
-    await page.click('#btn_guardar_inc');
+    await page.click('#btn_guardar_inc').catch(() => {});
     // Esperar a que aparezca modal de confirmación (el SSI abre un popup antes de enviar)
-    await page.waitForTimeout(2000);
-    await page.screenshot({ path: path.join(__dirname, '.ssi-modal.png') });
+    await page.waitForTimeout(2000).catch(() => {});
+    await page.screenshot({ path: path.join(__dirname, '.ssi-modal.png') }).catch(() => {});
 
     // Intentar hacer clic en el botón de confirmación del modal (varios selectores posibles)
     const confirmSelectors = [
@@ -360,7 +381,7 @@ async function crearTicketSSI({ categoria, categoriaId, sede, sedeId, titulo, de
         const btn = page.locator(sel).first();
         const visible = await btn.isVisible({ timeout: 300 }).catch(() => false);
         if (visible) {
-          await btn.click();
+          await btn.click().catch(() => {});
           modalClicked = true;
           console.log(`[SSI] Clic en botón de confirmación: ${sel}`);
           break;
@@ -372,8 +393,12 @@ async function crearTicketSSI({ categoria, categoriaId, sede, sedeId, titulo, de
     }
 
     // Dar tiempo al SSI para procesar y redirigir
-    await page.waitForLoadState('networkidle', { timeout: 30000 }).catch(() => {});
-    await page.waitForTimeout(4000);
+    const pageClosedPromise = new Promise(r => page.once('close', () => r('closed')));
+    const loadStatePromise = page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => 'timeout');
+    const loadResult = await Promise.race([loadStatePromise, pageClosedPromise]);
+    if (loadResult !== 'closed') {
+      await page.waitForTimeout(2000).catch(() => {});
+    }
 
     // ── Capturar resultado ─────────────────────────────────────────────
     const resultado = await page.evaluate(() => {
@@ -392,9 +417,13 @@ async function crearTicketSSI({ categoria, categoriaId, sede, sedeId, titulo, de
       const error = errEl ? errEl.textContent.trim() : null;
       const isErrorPage = title.toLowerCase().includes('error') || body.includes('HTTP ERROR') || body.includes('Esta página no funciona');
       return { num, error, isErrorPage, url: window.location.href, bodySnippet: body.substring(0, 300) };
+    }).catch(evalErr => {
+      // La página puede haberse cerrado durante la redirección — intentar leer URL actual
+      console.warn('[SSI] page.evaluate falló (posible redirect):', evalErr.message);
+      return { num: null, error: null, isErrorPage: false, url: '', bodySnippet: '' };
     });
 
-    await page.screenshot({ path: path.join(__dirname, '.ssi-after-submit.png') });
+    await page.screenshot({ path: path.join(__dirname, '.ssi-after-submit.png') }).catch(() => {});
 
     if (resultado.isErrorPage) {
       throw new Error('El SSI respondió con error de servidor al enviar el formulario. El campo "Tipo de Solicitud" puede no haberse completado.');
@@ -413,7 +442,10 @@ async function crearTicketSSI({ categoria, categoriaId, sede, sedeId, titulo, de
     };
 
   } finally {
-    await browser.close();
+    await Promise.race([
+      browser.close(),
+      new Promise(r => setTimeout(r, 8000)),
+    ]).catch(() => {});
   }
 }
 

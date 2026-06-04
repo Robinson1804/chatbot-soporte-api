@@ -9,7 +9,7 @@ async function handleGenerateDocument({ tipo, datos }) {
   return { ok: true, tipo, datos };
 }
 
-const SSI_TIMEOUT_MS = 180_000; // 3 min — Playwright + navegación SSI (login + modal check)
+const SSI_TIMEOUT_MS = 240_000; // 4 min — Playwright + navegación SSI (login + modal check)
 
 async function handleCreateSSITicket({ titulo, descripcion, categoria, categoriaId, sede, sedeId }, sessionId) {
   const timeoutPromise = new Promise((_, reject) =>
@@ -24,15 +24,15 @@ async function handleCreateSSITicket({ titulo, descripcion, categoria, categoria
       timeoutPromise,
     ]);
     if (sessionId) {
-      await saveEvent(sessionId, 'ticket_creado', {
+      saveEvent(sessionId, 'ticket_creado', {
         titulo, categoria, sede, ticketNum: resultado.ticketNum,
-      });
+      }).catch(() => {});
     }
     return { ok: true, ticketNum: resultado.ticketNum, mensaje: resultado.mensaje };
   } catch (err) {
     console.error('[SSI] handleCreateSSITicket error:', err.message);
     if (sessionId) {
-      await saveEvent(sessionId, 'error_ssi', { titulo, error: err.message });
+      saveEvent(sessionId, 'error_ssi', { titulo, error: err.message }).catch(() => {});
     }
     return { ok: false, error: err.message };
   }

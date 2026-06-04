@@ -13,14 +13,15 @@ const { chromium } = require('playwright');
 
 const BASE_URL = 'http://localhost:3000';
 const GEMINI_TIMEOUT   = 45_000;   // tiempo máximo para que Gemini responda
-const SSI_AUTO_TIMEOUT = 150_000;  // automation SSI (~72s) + buffer
+const SSI_AUTO_TIMEOUT = 540_000;  // Gemini 2.5 Flash (thinking ~30s) + SSI automation (~120s) + handler timeout (240s) + buffer
 
 // Espera a que #userInput quede habilitado (bot terminó de responder)
 // También detecta si ya hay resultado SSI para terminar antes
 async function waitForBotDone(page, timeout = GEMINI_TIMEOUT) {
   return page.waitForFunction(
     () => !document.getElementById('userInput')?.disabled,
-    { timeout },
+    null,          // arg (no se necesita pasar nada a la función)
+    { timeout },   // opciones — aquí sí aplica el timeout personalizado
   );
 }
 
@@ -88,20 +89,28 @@ async function main() {
   const MAX_TURNS = 10;
   let turn = 0;
   let prevBotMsg = ''; // rastrea el último mensaje del bot para detectar cuando no avanza
+  let pushCount = 0;   // limita los pushes consecutivos para evitar doble SSI
+  let confirmationSent = false; // se activa tras enviar confirmación — evita pushes post-SSI
 
   while (turn < MAX_TURNS) {
     turn++;
     console.log(`\n[turno ${turn}] Esperando respuesta del bot...`);
 
-    // Usar siempre SSI_AUTO_TIMEOUT: el bot puede llamar la automation en cualquier turno
+    // Esperar CUALQUIERA de las dos señales: bot terminó O ticket apareció
+    // Esto evita el caso donde el SSI automation corre (input disabled) pero
+    // .doc-download-row aparece antes de que setStreaming(false) sea llamado.
     try {
-      await waitForBotDone(page, SSI_AUTO_TIMEOUT);
+      await Promise.race([
+        waitForBotDone(page, SSI_AUTO_TIMEOUT),
+        page.waitForSelector('.doc-download-row', { timeout: SSI_AUTO_TIMEOUT }),
+      ]);
     } catch {
       console.log('  [timeout] El bot tardó demasiado');
       break;
     }
 
-    // ¿Ya tenemos resultado?
+    // ¿Ya tenemos resultado? Dar 2s para que el DOM procese el action event del SSE
+    await page.waitForSelector('.doc-download-row', { timeout: 2000 }).catch(() => {});
     if (await ticketResultVisible(page)) {
       console.log('  [resultado] .doc-download-row detectado');
       break;
@@ -123,7 +132,11 @@ async function main() {
     for (const c of ['Sí, crear el ticket', 'Confirmar y crear', 'Confirmar']) {
       if (await clickChip(page, c, 1_500)) {
         console.log(`  [espera] SSI automation en curso (hasta ${SSI_AUTO_TIMEOUT / 1000}s)...`);
-        await waitForBotDone(page, SSI_AUTO_TIMEOUT).catch(() => {});
+        confirmationSent = true;
+        await Promise.race([
+          waitForBotDone(page, SSI_AUTO_TIMEOUT),
+          page.waitForSelector('.doc-download-row', { timeout: SSI_AUTO_TIMEOUT }),
+        ]).catch(() => {});
         if (await ticketResultVisible(page)) break;
         continue;
       }
@@ -133,6 +146,7 @@ async function main() {
     // 2. Aceptar creación automática
     if (await clickChip(page, 'Crear ticket automáticamente', 1_500)) {
       prevBotMsg = '';
+      pushCount = 0;
       continue;
     }
 
@@ -140,6 +154,7 @@ async function main() {
     for (const c of ['Solo mi equipo', 'No hubo cambios', 'No, ningún cambio', 'El problema persiste']) {
       if (await clickChip(page, c, 1_000)) {
         prevBotMsg = '';
+        pushCount = 0;
         break;
       }
     }
@@ -154,6 +169,7 @@ async function main() {
       console.log('  [resp] nombre → "Juan Pérez"');
       await page.waitForTimeout(400);
       prevBotMsg = '';
+      pushCount = 0;
       continue;
     }
     if (lower.includes('área') || lower.includes('dependencia')) {
@@ -162,6 +178,7 @@ async function main() {
       console.log('  [resp] área → "Dirección de Informática"');
       await page.waitForTimeout(400);
       prevBotMsg = '';
+      pushCount = 0;
       continue;
     }
     if (lower.includes('sede') && !lower.includes('sede central')) {
@@ -170,6 +187,7 @@ async function main() {
       console.log('  [resp] sede → "Sede Central"');
       await page.waitForTimeout(400);
       prevBotMsg = '';
+      pushCount = 0;
       continue;
     }
     if (lower.includes('confirma') || lower.includes('datos correctos') || lower.includes('¿es correcto')) {
@@ -178,22 +196,91 @@ async function main() {
       console.log('  [resp] confirmación textual enviada');
       await page.waitForTimeout(400);
       prevBotMsg = '';
+      pushCount = 0;
+      confirmationSent = true; // la SSI debería dispararse en el próximo turno
       continue;
     }
 
-    // 5. Fallback: si el bot no avanzó (mismo mensaje que el turno anterior) → empujar
+    // 5. Fallback: si el bot no avanzó — verificar si SSI ya está en curso antes de pushear
     if (lastMsg === prevBotMsg) {
-      await inputEl.fill('Sí, por favor creen el ticket en el SSI automáticamente.');
+      const inputEnabled = await page.evaluate(() => !document.getElementById('userInput')?.disabled);
+
+      if (!inputEnabled) {
+        // Input disabled = SSI corriendo (bot respondió vacío mientras ejecuta tool call)
+        console.log('  [espera] SSI en curso (input disabled) — esperando .doc-download-row...');
+        await page.waitForSelector('.doc-download-row', { timeout: SSI_AUTO_TIMEOUT }).catch(() => {});
+        if (await ticketResultVisible(page)) break;
+        // Esperar también que el input se habilite (bot terminó)
+        await waitForBotDone(page, SSI_AUTO_TIMEOUT).catch(() => {});
+        if (await ticketResultVisible(page)) break;
+        break;
+      }
+
+      // Si ya enviamos confirmación y el bot respondió vacío con input enabled:
+      // La SSI se ejecutó y el resultado debería estar en el DOM — esperar un poco más
+      if (confirmationSent && lastMsg === '') {
+        console.log('  [espera] post-confirmación: SSI debería haber corrido — esperando resultado...');
+        await page.waitForSelector('.doc-download-row', { timeout: SSI_AUTO_TIMEOUT }).catch(() => {});
+        if (await ticketResultVisible(page)) break;
+        await waitForBotDone(page, 30_000).catch(() => {});
+        if (await ticketResultVisible(page)) break;
+        // Si aún no hay resultado, la SSI falló silenciosamente — esperar el próximo bot message
+        confirmationSent = false; // resetear para no quedar en loop
+        prevBotMsg = lastMsg;
+        pushCount = 0;
+        continue;
+      }
+
+      if (pushCount === 0) {
+        await inputEl.fill('Sí, por favor creen el ticket en el SSI automáticamente.');
+        await inputEl.press('Enter');
+        console.log('  [resp] push → crear ticket SSI (bot sin avanzar)');
+        await page.waitForTimeout(400);
+        prevBotMsg = '';
+        pushCount++;
+        continue;
+      }
+
+      // pushCount > 0 y input habilitado — Gemini respondió vacío sin tool call
+      if (pushCount < 3) {
+        // Reintentar con datos explícitos
+        console.log('  [retry] respuesta vacía — reintentando con datos explícitos');
+        await inputEl.fill('Por favor registre el ticket en el SSI. Datos: usuario Juan Pérez, área Dirección de Informática, sede Sede Central, problema: computadora no enciende desde esta mañana.');
+        await inputEl.press('Enter');
+        console.log('  [resp] retry con datos explícitos');
+        await page.waitForTimeout(400);
+        prevBotMsg = '';
+        pushCount++;
+        confirmationSent = true; // cada retry es efectivamente una confirmación
+        continue;
+      } else {
+        console.log('  [abort] máx reintentos — esperando .doc-download-row último intento...');
+        await page.waitForSelector('.doc-download-row', { timeout: SSI_AUTO_TIMEOUT }).catch(() => {});
+      }
+
+      if (await ticketResultVisible(page)) break;
+      break;
+    }
+
+    // Bot envió mensaje nuevo pero sin chips/preguntas reconocidas
+    // Detectar si clasificó el incidente (P1/P2/P3/P4) sin presentar resumen de ticket
+    const isClassif = /\bp[1-4]\b/i.test(lastMsg) || lower.includes('prioridad') || lower.includes('clasifica') || lower.includes('incidencia');
+    const hasTicketAction = lower.includes('confirmar') || lower.includes('registrar') || lower.includes('crear el ticket') || lower.includes('ticket ssi') || lower.includes('¿desea');
+
+    if (isClassif && !hasTicketAction) {
+      // Bot solo clasificó sin avanzar al resumen — empujar con datos completos
+      await inputEl.fill('Sí, de acuerdo con la clasificación. Por favor registre el ticket en el SSI con estos datos: Juan Pérez, Dirección de Informática, Sede Central, computadora no enciende desde esta mañana.');
       await inputEl.press('Enter');
-      console.log('  [resp] push → crear ticket SSI (bot sin avanzar)');
+      console.log('  [resp] clasificación detectada → empujar con datos al registro');
       await page.waitForTimeout(400);
       prevBotMsg = '';
-      continue;
+      pushCount = 0;
+    } else {
+      // Bot avanzó con contenido no reconocido — esperar siguiente turno
+      console.log('  [wait] bot avanzó, esperando próxima respuesta...');
+      prevBotMsg = lastMsg;
+      pushCount = 0;
     }
-
-    // Bot envió mensaje nuevo pero sin chips/preguntas reconocidas — esperar siguiente turno
-    console.log('  [wait] bot avanzó, esperando próxima respuesta...');
-    prevBotMsg = lastMsg;
   }
 
   // ─────────────────────────────────────────────────────────

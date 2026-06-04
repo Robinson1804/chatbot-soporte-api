@@ -53,6 +53,8 @@ app.post('/api/chat', chatLimiter, horarioLaboral, sessionMiddleware, async (req
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
   res.setHeader('X-Accel-Buffering', 'no');
+  // Desactivar socket timeout para este endpoint SSE (SSI automation puede tardar 3+ minutos)
+  req.socket?.setTimeout(0);
 
   const dbHistory = await getSessionMessages(req.sessionId);
   const geminiHistory = dbHistory.map(({ role, content }) => ({
@@ -72,12 +74,16 @@ app.post('/api/chat', chatLimiter, horarioLaboral, sessionMiddleware, async (req
         systemInstruction: SYSTEM_PROMPT,
         tools: [{ functionDeclarations: toolDeclarations }],
         toolConfig: { functionCallingConfig: { mode: 'AUTO' } },
+        generationConfig: { thinkingConfig: { thinkingBudget: 8192 } },
       });
     }
 
     await saveMessage(req.sessionId, 'user', message);
 
-    const chat = model.startChat({ history: geminiHistory });
+    const chat = model.startChat({
+      history: geminiHistory,
+      generationConfig: { thinkingConfig: { thinkingBudget: 8192 } },
+    });
     const result = await chat.sendMessageStream(message);
 
     let fullText = '';
@@ -115,9 +121,26 @@ app.post('/api/chat', chatLimiter, horarioLaboral, sessionMiddleware, async (req
       const handler = toolHandlers[name];
       if (!handler) continue;
 
-      const payload = name === 'create_ssi_ticket'
-        ? await handler(args, req.sessionId)
-        : await handler(args);
+      // Para tool calls largos (SSI automation puede tardar 1-3 min), enviar heartbeats SSE
+      // para evitar que el browser corte la conexión por inactividad.
+      let heartbeatInterval = null;
+      if (name === 'create_ssi_ticket') {
+        heartbeatInterval = setInterval(() => {
+          if (!res.writableEnded) {
+            // Usar data: ping (no comentario) para que el browser no cierre la conexión idle
+            res.write('data: {"ping":true}\n\n');
+          }
+        }, 10000); // cada 10s
+      }
+
+      let payload;
+      try {
+        payload = name === 'create_ssi_ticket'
+          ? await handler(args, req.sessionId)
+          : await handler(args);
+      } finally {
+        if (heartbeatInterval) clearInterval(heartbeatInterval);
+      }
 
       if (name === 'generate_document' && payload.ok) {
         await saveEvent(req.sessionId, 'documento_generado', { tipo: args.tipo });
@@ -134,6 +157,7 @@ app.post('/api/chat', chatLimiter, horarioLaboral, sessionMiddleware, async (req
   } catch (err) {
     console.error('Error Gemini API:', err.message);
     res.write(`data: ${JSON.stringify({ error: 'Ocurrió un error al procesar su solicitud. Por favor intente nuevamente.' })}\n\n`);
+    res.write('data: [DONE]\n\n');
     res.end();
   }
 });
@@ -331,5 +355,13 @@ async function startServer() {
   runCleanup();
   setInterval(runCleanup, 24 * 60 * 60 * 1000);
 }
+
+// Evitar que errores no manejados de Playwright u otros módulos async crasheen el servidor
+process.on('unhandledRejection', (reason) => {
+  console.error('[server] unhandledRejection (no-crash):', reason?.message || reason);
+});
+process.on('uncaughtException', (err) => {
+  console.error('[server] uncaughtException (no-crash):', err?.message || err);
+});
 
 startServer();
