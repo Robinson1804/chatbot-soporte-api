@@ -9,10 +9,14 @@ async function createSession() {
 
 async function sessionExists(sessionId) {
   const res = await pool.query(
-    'SELECT id FROM sessions WHERE id = $1',
+    "SELECT id FROM sessions WHERE id = $1 AND updated_at > NOW() - INTERVAL '24 hours'",
     [sessionId]
   );
   return res.rows.length > 0;
+}
+
+async function deleteSessionMessages(sessionId) {
+  await pool.query('DELETE FROM messages WHERE session_id = $1', [sessionId]);
 }
 
 async function getSessionMessages(sessionId) {
@@ -51,4 +55,4 @@ async function cleanupOldSessions(daysOld = 90) {
   return res.rowCount;
 }
 
-module.exports = { createSession, sessionExists, getSessionMessages, saveMessage, saveEvent, cleanupOldSessions };
+module.exports = { createSession, sessionExists, getSessionMessages, saveMessage, saveEvent, cleanupOldSessions, deleteSessionMessages };

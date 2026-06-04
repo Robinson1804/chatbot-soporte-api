@@ -10,7 +10,7 @@ const { chatLimiter, generateLimiter, ticketLimiter } = require('./middleware/ra
 const internalOnly = require('./middleware/internalOnly');
 const cookieParser = require('cookie-parser');
 const sessionMiddleware = require('./middleware/session');
-const { getSessionMessages, saveMessage, saveEvent, cleanupOldSessions } = require('./db/queries');
+const { getSessionMessages, saveMessage, saveEvent, cleanupOldSessions, deleteSessionMessages } = require('./db/queries');
 const { initCache, getCachedContent } = require('./cache/geminiCache');
 const toolDeclarations = require('./tools/definitions');
 const toolHandlers     = require('./tools/handlers');
@@ -102,7 +102,13 @@ app.post('/api/chat', chatLimiter, horarioLaboral, sessionMiddleware, async (req
       }
     }
 
-    if (fullText) {
+    if (!fullText && pendingToolCalls.length > 0) {
+      const feedbackText = 'Procesando su solicitud...';
+      res.write(`data: ${JSON.stringify({ delta: feedbackText })}\n\n`);
+      fullText = feedbackText;
+    }
+
+    if (fullText && fullText !== 'Procesando su solicitud...') {
       await saveMessage(req.sessionId, 'assistant', fullText);
     }
 
@@ -162,7 +168,10 @@ app.post('/api/chat', chatLimiter, horarioLaboral, sessionMiddleware, async (req
   }
 });
 
-app.post('/api/reset', (req, res) => {
+app.post('/api/reset', sessionMiddleware, async (req, res) => {
+  if (req.sessionId) {
+    await deleteSessionMessages(req.sessionId).catch(() => {});
+  }
   res.clearCookie('otin_session');
   res.json({ ok: true });
 });

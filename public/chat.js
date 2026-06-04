@@ -104,6 +104,10 @@ async function sendMessage(text) {
         try {
           const parsed = JSON.parse(payload);
 
+          if (parsed.ping) {
+            continue; // heartbeat del servidor — ignorar
+          }
+
           if (parsed.error) {
             bubbleEl.textContent = parsed.error;
             bubbleEl.classList.add('error-bubble');
@@ -412,11 +416,11 @@ function removeChips() {
    ============================================================ */
 resetBtn.addEventListener('click', resetConversation);
 
-function resetConversation() {
+async function resetConversation() {
   history = [];
   sessionStorage.removeItem('otin-history');
   messagesEl.innerHTML = '';
-  fetch('/api/reset', { method: 'POST' }).catch(() => {});
+  await fetch('/api/reset', { method: 'POST' }).catch(() => {});
   showWelcome();
   userInput.focus();
 }
