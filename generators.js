@@ -793,14 +793,27 @@ async function generateAnexo02(d) {
   //             Ej: <w:t>Fecha Inicio: {</w:t>…<w:t>fechaInicio</w:t>…<w:t>}</w:t>
   // Patrón B  – texto+'{' en un run, 'nombre}' en el siguiente (2 runs)
   //             Ej: <w:t> {</w:t>…<w:t>telefono}</w:t>
+  //
+  // CRÍTICO — RPR_SC: la <w:rPr> en OOXML solo contiene self-closing tags
+  // (<w:rFonts/>, <w:b/>, <w:sz/>, etc.). Usar [\s\S]*? aquí cruza párrafos y
+  // produce matches de cientos de KB que destruyen el documento. RPR_SC matchea
+  // solo los self-closing tags dentro de rPr, sin cruzar ningún límite XML.
   let docXml = zip.file('word/document.xml').asText();
+
+  const RPR_SC = '(?:<w:rPr>(?:<[^<>]+/>\\s*)*<\\/w:rPr>)?';
 
   // Paso 0 – Patrón D: { | 'fechaI' | 'Hoy' | }
   // Word fragmentó {fechaHoy} en 4 runs al editar el template: { + fechaI + Hoy + }
-  // (entre p1 y p2 NO hay proofErr — diferente rsid en cada run).
-  // Este fix es específico para ese placeholder; un regex genérico captura demasiado.
+  // (entre fechaI y Hoy NO hay proofErr — diferente rsid en cada run).
   docXml = docXml.replace(
-    /<w:t(\s[^>]*)?>(\{)<\/w:t><\/w:r>(?:<w:proofErr[^/]*\/>\s*)?<w:r(?:\s[^>]*)?>(?:<w:rPr>[\s\S]*?<\/w:rPr>)?<w:t(\s[^>]*)?>fechaI<\/w:t><\/w:r><w:r(?:\s[^>]*)?>(?:<w:rPr>[\s\S]*?<\/w:rPr>)?<w:t(\s[^>]*)?>Hoy<\/w:t><\/w:r>(?:<w:proofErr[^/]*\/>\s*)?<w:r(?:\s[^>]*)?>(?:<w:rPr>[\s\S]*?<\/w:rPr>)?<w:t(\s[^>]*)?>\}<\/w:t>/g,
+    new RegExp(
+      '<w:t(\\s[^>]*)?>\\{<\\/w:t><\\/w:r>(?:<w:proofErr[^/]*\\/>\\s*)?' +
+      '<w:r(?:\\s[^>]*)?>'+RPR_SC+'<w:t(\\s[^>]*)?>fechaI<\\/w:t><\\/w:r>' +
+      '<w:r(?:\\s[^>]*)?>'+RPR_SC+'<w:t(\\s[^>]*)?>Hoy<\\/w:t><\\/w:r>' +
+      '(?:<w:proofErr[^/]*\\/>\\s*)?' +
+      '<w:r(?:\\s[^>]*)?>'+RPR_SC+'<w:t(\\s[^>]*)?>\\\}<\\/w:t>',
+      'g'
+    ),
     (_, a1) => `<w:t${a1 || ''}>{fechaHoy}</w:t>`
   );
 
@@ -808,22 +821,38 @@ async function generateAnexo02(d) {
   // La '{' está sola en un <w:t>, el nombre en el siguiente y '}' en el tercero.
   // Entre runs puede haber <w:proofErr .../> (spell/gramCheck markers).
   docXml = docXml.replace(
-    /<w:t(\s[^>]*)?>(\{)<\/w:t><\/w:r>(?:<w:proofErr[^/]*\/>)*<w:r(?:\s[^>]*)?>(?:<w:rPr>[\s\S]*?<\/w:rPr>)?<w:t(\s[^>]*)?>([a-zA-Z][a-zA-Z0-9_]*)<\/w:t><\/w:r>(?:<w:proofErr[^/]*\/>)*<w:r(?:\s[^>]*)?>(?:<w:rPr>[\s\S]*?<\/w:rPr>)?<w:t(\s[^>]*)?>\}<\/w:t>/g,
-    (_, a1, _brace, _a3, name, _a5) => `<w:t${a1 || ''}>{${name}}</w:t>`
+    new RegExp(
+      '<w:t(\\s[^>]*)?>\\{<\\/w:t><\\/w:r>(?:<w:proofErr[^/]*\\/>)*' +
+      '<w:r(?:\\s[^>]*)?>'+RPR_SC+'<w:t(\\s[^>]*)?>([a-zA-Z][a-zA-Z0-9_]*)<\\/w:t><\\/w:r>' +
+      '(?:<w:proofErr[^/]*\\/>)*' +
+      '<w:r(?:\\s[^>]*)?>'+RPR_SC+'<w:t(\\s[^>]*)?>\\\}<\\/w:t>',
+      'g'
+    ),
+    (_, a1, _a2, name) => `<w:t${a1 || ''}>{${name}}</w:t>`
   );
 
   // Paso 2 – Patrón BE: texto+{</w:t></w:r> ... <w:t>nombre</w:t></w:r> ... <w:t>}
   // La '{' está al FINAL de texto en el primer run; nombre en el segundo; '}' en el tercero.
   // Ej: "Fecha Inicio: {" | "fechaInicio" | "}"
   docXml = docXml.replace(
-    /(<w:t[^>]*>[^<]*)\{<\/w:t><\/w:r>(?:<w:proofErr[^/]*\/>\s*)*<w:r(?:\s[^>]*)?>(?:<w:rPr>[\s\S]*?<\/w:rPr>)?<w:t(\s[^>]*)?>([a-zA-Z][a-zA-Z0-9_]*)<\/w:t><\/w:r>(?:<w:proofErr[^/]*\/>\s*)*<w:r(?:\s[^>]*)?>(?:<w:rPr>[\s\S]*?<\/w:rPr>)?<w:t(\s[^>]*)?>\}<\/w:t>/g,
-    (_, openTag, a2, name, _a4) => `${openTag}</w:t></w:r><w:r><w:t${a2 || ''}>{${name}}</w:t>`
+    new RegExp(
+      '(<w:t[^>]*>[^<]*)\\{<\\/w:t><\\/w:r>(?:<w:proofErr[^/]*\\/>\\s*)*' +
+      '<w:r(?:\\s[^>]*)?>'+RPR_SC+'<w:t(\\s[^>]*)?>([a-zA-Z][a-zA-Z0-9_]*)<\\/w:t><\\/w:r>' +
+      '(?:<w:proofErr[^/]*\\/>\\s*)*' +
+      '<w:r(?:\\s[^>]*)?>'+RPR_SC+'<w:t(\\s[^>]*)?>\\\}<\\/w:t>',
+      'g'
+    ),
+    (_, openTag, a2, name) => `${openTag}</w:t></w:r><w:r><w:t${a2 || ''}>{${name}}</w:t>`
   );
 
   // Paso 3 – Patrón B: texto+{</w:t></w:r> ... <w:t>nombre}  (2 runs)
   // La '{' está al final del texto del run anterior; 'nombre}' en el siguiente run.
   docXml = docXml.replace(
-    /([^<]*\{)<\/w:t><\/w:r>(?:<w:proofErr[^/]*\/>\s*)*<w:r(?:\s[^>]*)?>(?:<w:rPr>[\s\S]*?<\/w:rPr>)?<w:t(\s[^>]*)?>([a-zA-Z][a-zA-Z0-9_]*\})/g,
+    new RegExp(
+      '([^<]*\\{)<\\/w:t><\\/w:r>(?:<w:proofErr[^/]*\\/>\\s*)*' +
+      '<w:r(?:\\s[^>]*)?>'+RPR_SC+'<w:t(\\s[^>]*)?>([a-zA-Z][a-zA-Z0-9_]*\\})',
+      'g'
+    ),
     (_, textWithBrace, a2, nameClose) => {
       const prefix = textWithBrace.slice(0, -1); // quitar la '{'
       return `${prefix}</w:t></w:r><w:r><w:t${a2 || ''}>{${nameClose}`;
