@@ -783,18 +783,26 @@ async function generateAnexo02(d) {
 
   // ── Pre-procesar el XML para fusionar runs fragmentados ──────────────────
   // Word divide los placeholders {xxx} en múltiples <w:r> al editar.
-  // Hay 3 patrones de fragmentación en este template:
+  // Patrones presentes en este template:
   //
-  // Patrón B – '{' pegado al texto anterior en un run, nombre+'}' en el siguiente
-  //   Ejemplo: <w:t>Cargo / Función{</w:t></w:r><proofErr?><w:r><w:t>cargo}</w:t>
-  //   Fix: quitar el '{' del texto y pegar '{nombre}' al inicio del siguiente run
-  //
-  // Patrón C – tres runs separados: '{', 'nombre', '}'
-  //   Ejemplo: <w:t>{</w:t></w:r><proofErr?><w:r><w:t>nombre</w:t></w:r><proofErr?><w:r><w:t>}
-  //   Fix: colapsar los tres runs en '{nombre}' dentro del primer run
-  //
-  // Patrón A/D – placeholder ya completo en un único run, sin cambios
+  // Patrón C  – 3 runs: '{' | 'nombre' | '}'  (proofErr opcionales entre runs)
+  // Patrón D  – 4 runs: '{' | 'p1' | 'p2' | '}'  (p1+p2 sin proofErr entre ellos)
+  //             Ocurre cuando Word fragmenta el nombre en 2 runs (ej. 'fechaI'+'Hoy').
+  //             Se normaliza a '{fechaHoy}' renombrando 'fechaIHoy' → 'fechaHoy'.
+  // Patrón BE – texto+'{' en un run, nombre en el siguiente, '}' en el tercero
+  //             Ej: <w:t>Fecha Inicio: {</w:t>…<w:t>fechaInicio</w:t>…<w:t>}</w:t>
+  // Patrón B  – texto+'{' en un run, 'nombre}' en el siguiente (2 runs)
+  //             Ej: <w:t> {</w:t>…<w:t>telefono}</w:t>
   let docXml = zip.file('word/document.xml').asText();
+
+  // Paso 0 – Patrón D: { | 'fechaI' | 'Hoy' | }
+  // Word fragmentó {fechaHoy} en 4 runs al editar el template: { + fechaI + Hoy + }
+  // (entre p1 y p2 NO hay proofErr — diferente rsid en cada run).
+  // Este fix es específico para ese placeholder; un regex genérico captura demasiado.
+  docXml = docXml.replace(
+    /<w:t(\s[^>]*)?>(\{)<\/w:t><\/w:r>(?:<w:proofErr[^/]*\/>\s*)?<w:r(?:\s[^>]*)?>(?:<w:rPr>[\s\S]*?<\/w:rPr>)?<w:t(\s[^>]*)?>fechaI<\/w:t><\/w:r><w:r(?:\s[^>]*)?>(?:<w:rPr>[\s\S]*?<\/w:rPr>)?<w:t(\s[^>]*)?>Hoy<\/w:t><\/w:r>(?:<w:proofErr[^/]*\/>\s*)?<w:r(?:\s[^>]*)?>(?:<w:rPr>[\s\S]*?<\/w:rPr>)?<w:t(\s[^>]*)?>\}<\/w:t>/g,
+    (_, a1) => `<w:t${a1 || ''}>{fechaHoy}</w:t>`
+  );
 
   // Paso 1 – Patrón C: {</w:t></w:r> ... <w:t>nombre</w:t></w:r> ... <w:t>}
   // La '{' está sola en un <w:t>, el nombre en el siguiente y '}' en el tercero.
@@ -804,11 +812,22 @@ async function generateAnexo02(d) {
     (_, a1, _brace, _a3, name, _a5) => `<w:t${a1 || ''}>{${name}}</w:t>`
   );
 
-  // Paso 2 – Patrón B: texto{</w:t></w:r> ... <w:t>nombre}
+  // Paso 2 – Patrón BE: texto+{</w:t></w:r> ... <w:t>nombre</w:t></w:r> ... <w:t>}
+  // La '{' está al FINAL de texto en el primer run; nombre en el segundo; '}' en el tercero.
+  // Ej: "Fecha Inicio: {" | "fechaInicio" | "}"
+  docXml = docXml.replace(
+    /(<w:t[^>]*>[^<]*)\{<\/w:t><\/w:r>(?:<w:proofErr[^/]*\/>\s*)*<w:r(?:\s[^>]*)?>(?:<w:rPr>[\s\S]*?<\/w:rPr>)?<w:t(\s[^>]*)?>([a-zA-Z][a-zA-Z0-9_]*)<\/w:t><\/w:r>(?:<w:proofErr[^/]*\/>\s*)*<w:r(?:\s[^>]*)?>(?:<w:rPr>[\s\S]*?<\/w:rPr>)?<w:t(\s[^>]*)?>\}<\/w:t>/g,
+    (_, openTag, a2, name, _a4) => `${openTag}</w:t></w:r><w:r><w:t${a2 || ''}>{${name}}</w:t>`
+  );
+
+  // Paso 3 – Patrón B: texto+{</w:t></w:r> ... <w:t>nombre}  (2 runs)
   // La '{' está al final del texto del run anterior; 'nombre}' en el siguiente run.
   docXml = docXml.replace(
-    /(\{)<\/w:t><\/w:r>(?:<w:proofErr[^/]*\/>)*<w:r(?:\s[^>]*)?>(?:<w:rPr>[\s\S]*?<\/w:rPr>)?<w:t(\s[^>]*)?>([a-zA-Z][a-zA-Z0-9_]*\})/g,
-    (_, _brace, a2, nameClose) => `</w:t></w:r><w:r><w:t${a2 || ''}>{${nameClose}`
+    /([^<]*\{)<\/w:t><\/w:r>(?:<w:proofErr[^/]*\/>\s*)*<w:r(?:\s[^>]*)?>(?:<w:rPr>[\s\S]*?<\/w:rPr>)?<w:t(\s[^>]*)?>([a-zA-Z][a-zA-Z0-9_]*\})/g,
+    (_, textWithBrace, a2, nameClose) => {
+      const prefix = textWithBrace.slice(0, -1); // quitar la '{'
+      return `${prefix}</w:t></w:r><w:r><w:t${a2 || ''}>{${nameClose}`;
+    }
   );
 
   // ── Paso 3: hacer dinámicos los checkboxes estáticos del template ──────────
@@ -842,6 +861,9 @@ async function generateAnexo02(d) {
   const ck  = (v) => v ? '☒' : '☐';
   const tc  = (d.tipoContrato || '').toUpperCase().replace(/[^A-Z\-]/g, '');
   const ts  = d.tipoSolicitud || '';
+  const fechaHoy = new Date().toLocaleDateString('es-PE', {
+    day: '2-digit', month: 'long', year: 'numeric',
+  });
 
   doc.render({
     nombres:          d.nombres             || '',
@@ -860,6 +882,7 @@ async function generateAnexo02(d) {
     justificacion:    d.justificacion       || '',
     nombreDirector:   d.nombreDirector      || '',
     nombreGenerico:   srv.usuarioGenerico   || '',
+    fechaHoy,
     // Condición laboral
     ckNombrado:       ck(tc === 'NOMBRADO'),
     ckCAS:            ck(tc === 'CAS'),
