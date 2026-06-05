@@ -108,12 +108,51 @@ html, body {
   background: #0D1F44;
   border-radius: 20px 20px 0 0;
   padding: 10px 14px;
+  flex-shrink: 0;
 }
 
-/* Logo INEI en el widget: un poco más chico */
+/* header-left debe poder encoger; sin min-width el texto no trunca */
+.widget-panel .header-left {
+  min-width: 0;
+  flex: 1;
+}
+
+/* Avatar más pequeño en el widget para ganar espacio */
+.widget-panel .bot-avatar-header {
+  width: 38px;
+  height: 38px;
+  flex-shrink: 0;
+}
+
+/* Título: una sola línea con ellipsis */
+.widget-panel .header-title {
+  min-width: 0;
+  flex: 1;
+}
+
+.widget-panel .title-main {
+  font-size: 0.88rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Subtítulo oculto en el widget — ocupa demasiado espacio */
+.widget-panel .title-sub {
+  display: none;
+}
+
+/* Logo INEI en el widget: más compacto */
 .widget-panel .inei-logo-header {
-  height: 30px;
-  padding: 2px 6px;
+  height: 28px;
+  padding: 2px 5px;
+  flex-shrink: 0;
+}
+
+/* header-right no debe estirar */
+.widget-panel .header-right {
+  flex-shrink: 0;
+  gap: 8px;
 }
 
 /* ============================================================
