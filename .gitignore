@@ -18,6 +18,11 @@ run-*.png
 debug-*.png
 debug-cat-*.png
 
+# Archivos generados de prueba (ANEXO02)
+ANEXO02_*.docx
+*.tmp
+/tmp/
+
 # Logs
 *.log
 

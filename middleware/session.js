@@ -7,8 +7,14 @@ async function sessionMiddleware(req, res, next) {
   let sessionId = req.cookies?.[COOKIE_NAME];
 
   if (sessionId) {
-    const exists = await sessionExists(sessionId);
-    if (!exists) sessionId = null;
+    // Validar formato UUID antes de consultar la BD para evitar error 22P02
+    const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(sessionId);
+    if (!isUUID) {
+      sessionId = null;
+    } else {
+      const exists = await sessionExists(sessionId).catch(() => false);
+      if (!exists) sessionId = null;
+    }
   }
 
   if (!sessionId) {
