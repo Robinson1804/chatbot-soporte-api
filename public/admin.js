@@ -2,6 +2,7 @@
    Requiere Chart.js 4.x cargado previamente via CDN.
 */
 const REFRESH_MS = 60_000;
+const token = new URLSearchParams(window.location.search).get('token');
 
 // Chart instances — never destroy/recreate, only update data
 const charts = {};
@@ -19,7 +20,7 @@ function hideError() {
 // ─── Fetch ────────────────────────────────────────────────────────────────────
 async function fetchMetrics() {
   try {
-    const r = await fetch('/api/metrics', { cache: 'no-store' });
+    const r = await fetch(`/api/metrics?token=${token || ''}`, { cache: 'no-store' });
     if (!r.ok) throw new Error('HTTP ' + r.status);
     const data = await r.json();
     hideError();

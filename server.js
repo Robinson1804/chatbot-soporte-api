@@ -347,6 +347,12 @@ app.get('/api/metrics', internalOnly, async (req, res) => {
 
 async function startServer() {
   try {
+    const { runMigrations } = require('./db/migrate');
+    await runMigrations();
+  } catch (err) {
+    console.warn('[migrate] No se pudo ejecutar migración:', err.message);
+  }
+  try {
     await initCache(process.env.GEMINI_API_KEY, SYSTEM_PROMPT, toolDeclarations);
   } catch (err) {
     console.warn('Context Cache no disponible, usando systemInstruction directo:', err.message);
