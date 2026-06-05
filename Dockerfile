@@ -30,7 +30,8 @@ RUN apt-get update && apt-get install -y \
 WORKDIR /app
 
 COPY package*.json ./
-RUN npm ci --omit=dev
+RUN npm ci --omit=dev --ignore-scripts && \
+    node_modules/.bin/playwright install chromium
 
 COPY . .
 
