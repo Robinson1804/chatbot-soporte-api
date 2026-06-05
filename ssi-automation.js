@@ -218,7 +218,7 @@ async function login(page, ctx) {
 // ─── Función principal ─────────────────────────────────────────────────────
 async function crearTicketSSI({ categoria, categoriaId, sede, sedeId, titulo, descripcion }) {
   const browser = await chromium.launch({
-    headless: process.env.PLAYWRIGHT_HEADLESS === 'true', // headful por defecto (INEI requiere GUI)
+    headless: process.env.PLAYWRIGHT_HEADLESS !== 'false', // headless por defecto; PLAYWRIGHT_HEADLESS=false para debug local
     slowMo: 150,     // reducido: la búsqueda filtra antes de iterar, menos espera necesaria
     args: ['--disable-blink-features=AutomationControlled'],
   });

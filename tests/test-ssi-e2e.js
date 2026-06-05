@@ -11,7 +11,7 @@
 
 const { chromium } = require('playwright');
 
-const BASE_URL = 'http://localhost:3000';
+const BASE_URL = process.env.BASE_URL || 'http://localhost:3000';
 const GEMINI_TIMEOUT   = 45_000;   // tiempo máximo para que Gemini responda
 const SSI_AUTO_TIMEOUT = 540_000;  // Gemini 2.5 Flash (thinking ~30s) + SSI automation (~120s) + handler timeout (240s) + buffer
 
