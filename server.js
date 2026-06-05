@@ -20,6 +20,9 @@ const horarioLaboral = require('./middleware/horarioLaboral');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Railway (y cualquier reverse proxy) envía X-Forwarded-For — necesario para rate limiting
+app.set('trust proxy', 1);
+
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 const SYSTEM_PROMPT = fs.readFileSync(
