@@ -127,6 +127,7 @@ app.post('/api/chat', chatLimiter, horarioLaboral, sessionMiddleware, async (req
     // Ejecutar tool calls y emitir action events al cliente
     for (const toolCall of pendingToolCalls) {
       const { name, args } = toolCall;
+      console.log(`[tool] ${name}`, JSON.stringify(args).substring(0, 120));
       const handler = toolHandlers[name];
       if (!handler) continue;
 
