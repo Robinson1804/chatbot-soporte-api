@@ -363,6 +363,10 @@ app.get('/admin', internalOnly, (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'admin.html'));
 });
 
+app.get('/widget', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'widget.html'));
+});
+
 app.get('/api/metrics', internalOnly, async (req, res) => {
   try {
     const data = await getAllMetrics();
