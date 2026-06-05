@@ -151,7 +151,18 @@ function handleActionEvent(action, payload, rowEl, bubbleEl) {
       break;
     case 'download_template':
       if (payload.ok && payload.tipo) {
-        downloadTemplate(payload.tipo, rowEl);
+        // Si la burbuja tiene solo el texto de feedback genérico o está vacía, reemplazarla
+        if (!bubbleEl.textContent.trim() || bubbleEl.textContent.trim() === 'Procesando su solicitud...') {
+          const tipoLabel = { ANEXO01: 'ANEXO 01', ANEXO02: 'ANEXO 02', ANEXO03: 'ANEXO 03', ANEXO04: 'ANEXO 04', PROD02: 'PROD-02', F01: 'F-01', ANEXO07: 'ANEXO 07' }[payload.tipo] || payload.tipo;
+          renderBubbleContent(bubbleEl, `Aquí tiene la plantilla en blanco del ${tipoLabel}. Complétela con sus datos y adjúntela firmada al SSI.`);
+        }
+        // Disparar descarga automática
+        const link = document.createElement('a');
+        link.href = `/api/template/${payload.tipo}`;
+        link.download = `${payload.tipo}_plantilla_INEI.docx`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
       }
       break;
     case 'set_urgency':
@@ -462,37 +473,6 @@ function prependUrgencyBadge(bubbleEl, nivel) {
   bubbleEl.prepend(badge);
 }
 
-/* ============================================================
-   DESCARGA DE PLANTILLA EN BLANCO
-   ============================================================ */
-function downloadTemplate(tipo, triggerRow) {
-  const btnRow = document.createElement('div');
-  btnRow.className = 'doc-download-row';
-
-  const iconSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="16" height="16"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>`;
-  const tipoLabel = { ANEXO01: 'ANEXO 01', ANEXO02: 'ANEXO 02', ANEXO03: 'ANEXO 03', ANEXO04: 'ANEXO 04' }[tipo] || tipo;
-
-  const btn = document.createElement('a');
-  btn.className = 'doc-download-btn doc-download-btn--blank';
-  btn.href = `/api/template/${tipo}`;
-  btn.download = `${tipo}_plantilla_INEI.docx`;
-  btn.innerHTML = `${iconSvg} Descargar plantilla en blanco — ${tipoLabel} (.docx)`;
-
-  const note = document.createElement('p');
-  note.className = 'doc-note';
-  note.textContent = 'Plantilla oficial en blanco. Completá los datos manualmente y adjuntala firmada al SSI.';
-
-  btnRow.appendChild(btn);
-  btnRow.appendChild(note);
-
-  if (triggerRow && triggerRow.parentNode === messagesEl) {
-    triggerRow.insertAdjacentElement('afterend', btnRow);
-  } else {
-    messagesEl.appendChild(btnRow);
-  }
-
-  scrollToBottom();
-}
 
 /* ============================================================
    CREACIÓN DE TICKET SSI AUTOMÁTICO
