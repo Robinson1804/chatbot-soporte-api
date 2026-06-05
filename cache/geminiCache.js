@@ -42,4 +42,14 @@ function getCachedContent() {
   return null;
 }
 
-module.exports = { initCache, getCachedContent };
+function invalidateCache() {
+  if (renewTimer) {
+    clearTimeout(renewTimer);
+    renewTimer = null;
+  }
+  cachedContent = null;
+  cacheExpiresAt = null;
+  console.log('Gemini Context Cache invalidado. Se regenerará en el próximo initCache.');
+}
+
+module.exports = { initCache, getCachedContent, invalidateCache };
