@@ -11,17 +11,8 @@ const sendBtn    = document.getElementById('sendBtn');
 const resetBtn   = document.getElementById('resetBtn');
 
 const WELCOME_TEXT =
-  'Buenos días. Soy el asistente virtual de la Mesa de Ayuda de la OTIN.\n\n' +
-  'Estoy aquí para orientarle en el registro de solicitudes de soporte técnico en el SSI.\n\n' +
-  '¿En qué puedo ayudarle hoy?';
-
-const WELCOME_CHIPS = [
-  'Crear cuenta de correo',
-  'Acceso remoto (VPN)',
-  'No funciona internet',
-  'Acceso a carpeta del servidor',
-  'Instalar software',
-];
+  'Buenos días. Soy el asistente virtual de la Mesa de Ayuda de la OTIN.\n' +
+  '¿Me podría decir su nombre para poder atenderle mejor?';
 
 /* ============================================================
    INICIALIZACIÓN
@@ -33,7 +24,7 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 function showWelcome() {
-  appendBotMessage(WELCOME_TEXT, WELCOME_CHIPS);
+  appendBotMessage(WELCOME_TEXT);
 }
 
 /* ============================================================
