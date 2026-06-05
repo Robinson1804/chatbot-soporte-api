@@ -29,3 +29,9 @@ ANEXO02_*.docx
 # SSI automation artifacts (sesion, debug screenshots)
 .ssi-session.json
 .ssi-*.png
+
+# Screenshots y artefactos de pruebas
+tests/screenshots/
+
+# Logs del servidor
+server-startup.log
