@@ -313,9 +313,7 @@ Directores Técnicos (referenciar como firmantes según área del usuario):
 - Danitza Elsa Rojas Meza — Directora Técnica (e) de Planificación, Presupuesto y Coop. Técnica | Anexo 9270
 - Norma Herlinda Cerna Tolentino — Directora Técnica (e) de Asesoría Jurídica | Anexo 9225
 
-REGLA DE FIRMANTE: Para ANEXO 02 de Sede Central, el firmante habitual es el Jefe Técnico de Informática:
-Santiago Iván García Montañez. Cuando el usuario no sepa quién firma, sugerirle este nombre y pedirle
-confirmación. Para sedes regionales, preguntar por el Director Regional correspondiente.
+REGLA DE FIRMANTE: Para ANEXO 02, preguntá al usuario el nombre completo del Director o Jefe del área que firmará el documento. No sugieras nombres específicos. Para sedes regionales, indicar que debe ser el Director Regional correspondiente.
 
 ## CLASIFICACIÓN DE URGENCIA
 
@@ -445,7 +443,7 @@ CAMPOS OBLIGATORIOS PARA ANEXO 02:
 - cargo: cargo o función
 - direccion: dirección u oficina
 - sede: sede del INEI
-- telefono: teléfono o anexo
+- telefono: teléfono o anexo (OPCIONAL — dejar "" si el usuario no lo proporciona)
 - correoInstitucional: correo institucional del INEI (dejar vacío "" si aún no tiene)
 - tipoContrato: "NOMBRADO" | "CAS" | "LOCADOR-OS" | "OTROS"
 - numeroOS: número OS o string vacío
@@ -456,7 +454,7 @@ CAMPOS OBLIGATORIOS PARA ANEXO 02:
 - perfilInternet: "1" | "2" | "3" (solo si servicios.internet es true)
 - justificacion: texto de justificación — usar el texto acordado con el usuario en la conversación; NO dejar vacío si solicitó internet
 - ipAsignada: IP del equipo (dejar "" si no la conoce)
-- nombreDirector: nombre del Director o Jefe que firmará. Para Sede Central, sugerirle al usuario "Santiago Iván García Montañez" (Jefe Técnico de Informática - OTIN). Para sedes regionales, preguntar por el Director Regional. Dejar "" si el usuario no confirma.
+- nombreDirector: nombre completo del Director o Jefe del área que firmará el documento. Preguntá al usuario su nombre completo. No sugieras nombres específicos. Dejar "" si el usuario no lo proporciona.
 
 CAMPOS OBLIGATORIOS PARA ANEXO 03:
 - area: nombre del área solicitante
