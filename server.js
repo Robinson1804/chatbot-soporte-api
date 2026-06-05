@@ -105,7 +105,9 @@ app.post('/api/chat', chatLimiter, horarioLaboral, sessionMiddleware, async (req
       }
     }
 
-    if (!fullText && pendingToolCalls.length > 0) {
+    // Solo mostrar "Procesando su solicitud..." cuando va a correr SSI (tarda minutos)
+    const hasSsiCall = pendingToolCalls.some(t => t.name === 'create_ssi_ticket');
+    if (!fullText && hasSsiCall) {
       const feedbackText = 'Procesando su solicitud...';
       res.write(`data: ${JSON.stringify({ delta: feedbackText })}\n\n`);
       fullText = feedbackText;
@@ -125,6 +127,7 @@ app.post('/api/chat', chatLimiter, horarioLaboral, sessionMiddleware, async (req
     await saveEvent(req.sessionId, 'chat_latencia', { ms: latencyMs }).catch(() => {});
 
     // Ejecutar tool calls y emitir action events al cliente
+    const functionResponses = [];
     for (const toolCall of pendingToolCalls) {
       const { name, args } = toolCall;
       console.log(`[tool] ${name}`, JSON.stringify(args).substring(0, 120));
@@ -137,7 +140,6 @@ app.post('/api/chat', chatLimiter, horarioLaboral, sessionMiddleware, async (req
       if (name === 'create_ssi_ticket') {
         heartbeatInterval = setInterval(() => {
           if (!res.writableEnded) {
-            // Usar data: ping (no comentario) para que el browser no cierre la conexión idle
             res.write('data: {"ping":true}\n\n');
           }
         }, 10000); // cada 10s
@@ -160,6 +162,29 @@ app.post('/api/chat', chatLimiter, horarioLaboral, sessionMiddleware, async (req
       }
 
       res.write(`data: ${JSON.stringify({ action: name, payload })}\n\n`);
+      functionResponses.push({ functionResponse: { name, response: { result: 'ok' } } });
+    }
+
+    // Si Gemini solo llamó tools de fondo (set_urgency) sin dar texto ni UI al usuario,
+    // enviar los function responses de vuelta para que Gemini continúe la conversación.
+    const UI_TOOLS = new Set(['show_chips', 'show_form', 'create_ssi_ticket', 'download_template', 'generate_document']);
+    const hasVisibleOutput = fullText || pendingToolCalls.some(t => UI_TOOLS.has(t.name));
+
+    if (!hasVisibleOutput && functionResponses.length > 0) {
+      const followUp = await chat.sendMessageStream(functionResponses);
+      let followText = '';
+      for await (const chunk of followUp.stream) {
+        const parts = chunk.candidates?.[0]?.content?.parts || [];
+        for (const part of parts) {
+          if (part.text) {
+            followText += part.text;
+            res.write(`data: ${JSON.stringify({ delta: part.text })}\n\n`);
+          }
+        }
+      }
+      if (followText) {
+        await saveMessage(req.sessionId, 'assistant', followText);
+      }
     }
 
     res.write('data: [DONE]\n\n');
