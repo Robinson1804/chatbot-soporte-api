@@ -912,6 +912,7 @@ async function generateAnexo02(d) {
     nombreDirector:   d.nombreDirector      || '',
     nombreGenerico:   srv.usuarioGenerico   || '',
     fechaHoy,
+    fechaIHoy:        fechaHoy,
     // Condición laboral
     ckNombrado:       ck(tc === 'NOMBRADO'),
     ckCAS:            ck(tc === 'CAS'),
