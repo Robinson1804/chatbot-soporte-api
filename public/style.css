@@ -695,4 +695,10 @@ html, body {
     grid-template-columns: 1fr;
   }
 }
+.field-error-msg {
+  font-size: 11px;
+  color: #ef4444;
+  margin-top: 2px;
+  display: block;
+}
 /* ──────────────────────────────────────────────────────────── */

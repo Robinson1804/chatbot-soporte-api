@@ -529,6 +529,80 @@ function loadHistory() {
 /* IDs de campo que ocupan columna completa en el grid de 2 columnas */
 const FULL_WIDTH_IDS = ['nombres', 'direccion', 'justificacion', 'numeroOS', 'correo', 'correoInstitucional', 'telefono', 'tipoSolicitud'];
 
+/* Reglas de validación por campo.id */
+const VALIDACIONES = {
+  dni: {
+    pattern: /^\d{8}$/,
+    mensaje: 'El DNI debe tener exactamente 8 dígitos numéricos.'
+  },
+  telefono: {
+    pattern: /^[\d\s\-\+\(\)]{7,15}$/,
+    mensaje: 'Ingrese un número de teléfono válido (7 a 15 dígitos).'
+  },
+  correo: {
+    pattern: /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
+    mensaje: 'Ingrese un correo electrónico válido.'
+  },
+  correoInstitucional: {
+    pattern: /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
+    mensaje: 'Ingrese un correo institucional válido (puede dejarse en blanco si es nueva creación).'
+  },
+  nombres: {
+    minLength: 3,
+    mensaje: 'Ingrese el nombre completo (mínimo 3 caracteres).'
+  },
+  fechaInicio: {
+    isDate: true,
+    mensaje: 'Ingrese una fecha válida en formato DD/MM/YYYY.'
+  },
+  fechaTermino: {
+    isDate: true,
+    afterField: 'fechaInicio',
+    mensaje: 'La fecha de término debe ser posterior a la fecha de inicio.'
+  },
+  numeroOS: {
+    pattern: /^[a-zA-Z0-9\-\/]*$/,
+    mensaje: 'El número de OS solo puede contener letras, números, guiones o barras.'
+  }
+};
+
+function validateField(field) {
+  const id = field.name;
+  const value = field.value.trim();
+  const rules = VALIDACIONES[id];
+
+  if (field.required && !value) {
+    return 'Este campo es obligatorio.';
+  }
+  if (!value) return null;
+  if (!rules) return null;
+
+  if (rules.pattern && !rules.pattern.test(value)) return rules.mensaje;
+  if (rules.minLength && value.length < rules.minLength) return rules.mensaje;
+  if (rules.isDate) {
+    const ddmmyyyy = /^\d{2}\/\d{2}\/\d{4}$/.test(value);
+    const yyyymmdd = /^\d{4}-\d{2}-\d{2}$/.test(value);
+    if (!ddmmyyyy && !yyyymmdd) return rules.mensaje;
+  }
+  return null;
+}
+
+function showFieldError(field, mensaje) {
+  field.classList.add('field-error');
+  const prev = field.parentElement.querySelector('.field-error-msg');
+  if (prev) prev.remove();
+  const span = document.createElement('span');
+  span.className = 'field-error-msg';
+  span.textContent = mensaje;
+  field.parentElement.appendChild(span);
+}
+
+function clearFieldError(field) {
+  field.classList.remove('field-error');
+  const prev = field.parentElement.querySelector('.field-error-msg');
+  if (prev) prev.remove();
+}
+
 function renderForm({ titulo, campos }, triggerRow) {
   const formId = 'form-' + Date.now();
 
@@ -558,6 +632,7 @@ function renderForm({ titulo, campos }, triggerRow) {
           name="${campo.id}"
           placeholder="${campo.placeholder || ''}"
           ${campo.requerido ? 'required' : ''}
+          oninput="this.classList.remove('field-error'); const m = this.parentElement.querySelector('.field-error-msg'); if(m) m.remove();"
         >
       </div>`;
   }).join('');
@@ -593,14 +668,30 @@ function submitChatForm(formId) {
   let valid = true;
 
   fields.forEach((f) => {
-    if (f.required && !f.value.trim()) {
-      f.classList.add('field-error');
+    clearFieldError(f);
+    const error = validateField(f);
+    if (error) {
+      showFieldError(f, error);
       valid = false;
     } else {
-      f.classList.remove('field-error');
       data[f.name] = f.value.trim();
     }
   });
+
+  // Validación cruzada fecha inicio/término
+  const fi = card.querySelector('[name="fechaInicio"]');
+  const ft = card.querySelector('[name="fechaTermino"]');
+  if (fi && ft && fi.value && ft.value) {
+    const parseDate = s => {
+      if (/\d{4}-\d{2}-\d{2}/.test(s)) return new Date(s);
+      const [d, m, y] = s.split('/');
+      return new Date(`${y}-${m}-${d}`);
+    };
+    if (parseDate(ft.value) <= parseDate(fi.value)) {
+      showFieldError(ft, 'La fecha de término debe ser posterior a la de inicio.');
+      valid = false;
+    }
+  }
 
   if (!valid) return;
 
@@ -611,7 +702,7 @@ function submitChatForm(formId) {
 
   // Deshabilitar el formulario para que no se pueda reenviar
   card.querySelectorAll('input, select, button').forEach((el) => el.disabled = true);
-  card.querySelector('.chat-form-submit').textContent = 'Enviado';
+  card.querySelector('.chat-form-submit').textContent = '✓ Enviado';
 
   sendMessage(mensaje);
 }
