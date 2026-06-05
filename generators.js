@@ -933,7 +933,49 @@ async function generateAnexo02(d) {
     ckSinRedes:       ck(srv.internet && pNum !== '1' && !srv.redesSociales),
   });
 
-  return doc.getZip().generate({ type: 'nodebuffer' });
+  // ── Post-procesamiento: normalizar tamaños de fuente ────────────────────
+  // docxtemplater inyecta el valor del placeholder en el run original del
+  // template, preservando su <w:rPr>. Sin embargo dos casos producen fuentes
+  // incorrectas en el documento final:
+  //
+  //   1. Checkboxes (☒ / ☐): el template los tiene a sz=16 (8pt). Deben
+  //      ser sz=22 (11pt) para coincidir con el formulario oficial.
+  //
+  //   2. fechaInicio / fechaTermino: el placeholder estaba en un run cuya
+  //      '{' pertenecía a otro run (Patrón B). docxtemplater crea un run
+  //      nuevo SIN <w:rPr>, por lo que hereda el estilo predeterminado del
+  //      documento en lugar del Arial 8pt del resto del formulario.
+  //      Se les inyecta sz=16 (Arial 8pt) para uniformidad.
+  //
+  const zip2 = doc.getZip();
+  let docXml2 = zip2.file('word/document.xml').asText();
+
+  // 1. Checkboxes ☒/☐ con sz=16 → sz=22 (8pt → 11pt)
+  //    Los runs tienen la forma:
+  //    <w:r ...><w:rPr>...<w:sz w:val="16"/>...<w:szCs w:val="16"/>...</w:rPr><w:t ...>☒</w:t></w:r>
+  docXml2 = docXml2.replace(
+    /(<w:r(?:[^>]*)?>(?:<w:rPr>(?:<[^<>]+\/>[\s]*)*)<\/w:rPr>)?(<w:t[^>]*>[☒☐]<\/w:t><\/w:r>)/g,
+    (match) => {
+      // Subir sz de 16 a 22 solo dentro de este run
+      return match
+        .replace(/<w:sz w:val="16"\/>/g, '<w:sz w:val="22"/>')
+        .replace(/<w:szCs w:val="16"\/>/g, '<w:szCs w:val="22"/>');
+    }
+  );
+
+  // 2. Runs SIN <w:rPr> que contienen fechas (fechaInicio / fechaTermino):
+  //    <w:r><w:t ...>DD/MM/YYYY</w:t></w:r>  → inyectar rPr Arial 8pt
+  //    Patrón: <w:r> inmediatamente seguido de <w:t> (sin rPr intermedio)
+  //    y el texto tiene forma de fecha DD/MM/YYYY.
+  //    Usamos un selector más amplio: cualquier run sin rPr cuyo texto
+  //    coincide con el formato de fecha usado en el formulario.
+  docXml2 = docXml2.replace(
+    /<w:r><w:t([^>]*)>(\d{1,2}\/\d{1,2}\/\d{4})<\/w:t><\/w:r>/g,
+    '<w:r><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/><w:sz w:val="16"/><w:szCs w:val="16"/></w:rPr><w:t$1>$2</w:t></w:r>'
+  );
+
+  zip2.file('word/document.xml', docXml2);
+  return zip2.generate({ type: 'nodebuffer', mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
