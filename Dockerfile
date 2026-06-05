@@ -4,7 +4,7 @@ WORKDIR /app
 
 COPY package*.json ./
 RUN npm ci --omit=dev --ignore-scripts && \
-    node_modules/.bin/playwright install chromium --with-deps
+    node node_modules/playwright/cli.js install chromium --with-deps
 
 COPY . .
 
