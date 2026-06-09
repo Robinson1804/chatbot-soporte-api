@@ -1,8 +1,8 @@
 /**
  * generators.js
- * Genera documentos Word (.docx) para los ANEXOS OTIN/INEI
- * usando la librería `docx` (v9.6.1), construyendo los documentos
- * desde cero (sin templates).
+ * Genera documentos Word (.docx) para los ANEXOS OTIN/INEI.
+ * ANEXO 01 usa plantilla oficial con docxtemplater.
+ * Los demás anexos conservan la lógica existente del proyecto.
  *
  * Flujo: data (objeto JS) → estructura docx → buffer .docx
  *
@@ -676,93 +676,203 @@ function excepcionesBox(justificacion, minHeight = 900) {
 // ═════════════════════════════════════════════════════════════════════════════
 async function generateAnexo01(d) {
   d = d || {};
-  const accesos = Array.isArray(d.tipoAcceso) ? d.tipoAcceso : [d.tipoAcceso || 'remoto'];
-  const accNorm = accesos.map((a) => String(a).toLowerCase());
-  const wantsRemoto = accNorm.includes('remoto') || accNorm.includes('ambos');
-  const wantsUSB = accNorm.includes('usb') || accNorm.includes('ambos');
 
-  const correo = d.correoInstitucional || d.correo || '';
-  const oficina = d.direccion || d.oficina || '';
-  const hoy = d.fechaSolicitud || new Date().toLocaleDateString('es-PE');
+  const PizZip = require('pizzip');
+  const Docxtemplater = require('docxtemplater');
 
-  const children = [];
+  // El ANEXO 01 debe respetar el formato oficial. Por eso se rellena la
+  // plantilla .docx con docxtemplater, en lugar de reconstruir el documento
+  // desde cero con la librería docx.
+  const templateCandidates = [
+    path.join(__dirname, 'templates', 'ANEXO01_template.docx'),
+    path.join(__dirname, 'templates', 'ANEXO01_template_corregido.docx'),
+    path.join(__dirname, 'ANEXO01_template.docx'),
+    path.join(__dirname, 'ANEXO01_template_corregido.docx'),
+  ];
 
-  children.push(anexoHeader('Acceso Remoto y Desbloqueo de Puertos USB', 'ANEXO 01'));
-  children.push(...spacer(1));
+  const templatePath = templateCandidates.find((candidate) => fs.existsSync(candidate));
+  if (!templatePath) {
+    throw new Error('No se encontró la plantilla ANEXO01_template.docx en /templates.');
+  }
 
-  // DATOS DEL TRABAJADOR
-  children.push(sectionTitle('Datos del Trabajador'));
-  children.push(
-    sectionTable([
-      sectionRow('Nombres y Apellidos', d.nombres || ''),
-      sectionRow('DNI', d.dni || ''),
-      sectionRow('Cargo / Función', d.cargo || ''),
-      multiFieldRow([
-        { label: 'Dirección / Oficina', value: oficina },
-        { label: 'Correo', value: correo },
-      ]),
-      multiFieldRow([
-        { label: 'Sede', value: d.sede || '' },
-        { label: 'Teléfono', value: d.telefono || '' },
-      ]),
-    ])
-  );
-  children.push(...spacer(1));
+  const content = fs.readFileSync(templatePath, 'binary');
+  const zip = new PizZip(content);
 
-  // TIPO DE CONTRATO
-  children.push(sectionTitle('Tipo de Contrato'));
-  children.push(
-    sectionTable([
-      checkboxRow('Modalidad', ['NOMBRADO', 'CAS', 'LOCADOR-OS', 'OTROS'], d.tipoContrato),
-      multiFieldRow([
-        { label: 'Fecha Inicio', value: d.fechaInicioContrato || d.fechaInicio || '' },
-        { label: 'Fecha Término', value: d.fechaTerminoContrato || d.fechaTermino || '' },
-      ]),
-    ])
-  );
-  children.push(...spacer(1));
-
-  // TIPO DE ACCESO
-  children.push(sectionTitle('Tipo de Acceso'));
-  const accSel = [];
-  if (wantsRemoto) accSel.push('Acceso Remoto');
-  if (wantsUSB) accSel.push('Desbloqueo USB');
-  children.push(
-    sectionTable([
-      checkboxRow('Acceso solicitado', ['Acceso Remoto', 'Desbloqueo USB'], accSel),
-      sectionRow('Número OS', d.numeroOS || ''),
-      multiFieldRow([
-        { label: 'Fecha Inicio Acceso', value: d.fechaInicioAcceso || '' },
-        { label: 'Fecha Término Acceso', value: d.fechaTerminoAcceso || '' },
-      ]),
-    ])
-  );
-  children.push(...spacer(1));
-
-  // JUSTIFICACIONES
-  children.push(textareaTable('Justificación — Acceso Remoto', d.justificacionRemoto || '', 1000));
-  children.push(...spacer(1));
-  children.push(textareaTable('Justificación — Desbloqueo USB', d.justificacionUSB || '', 1000));
-  children.push(...spacer(2));
-
-  // FIRMAS
-  children.push(signatureBlock(`Firma del Director/a${d.nombreDirector ? ' — ' + d.nombreDirector : ''}`, 'Director/a de Área'));
-  children.push(...spacer(1));
-  children.push(
-    signatureBlock(`Firma del Solicitante${d.nombresSolicitante ? ' — ' + d.nombresSolicitante : (d.nombres ? ' — ' + d.nombres : '')}`, `Solicitante — ${hoy}`)
-  );
-
-  const doc = new Document({
-    styles: { default: { document: { run: { font: 'Calibri', size: 20 } } } },
-    sections: [
-      {
-        properties: { page: { margin: PAGE_MARGINS } },
-        children,
-      },
-    ],
+  const doc = new Docxtemplater(zip, {
+    paragraphLoop: true,
+    linebreaks: true,
+    delimiters: { start: '{', end: '}' },
+    nullGetter: () => '',
   });
 
-  return Packer.toBuffer(doc);
+  const clean = (value) => String(value ?? '').trim();
+  const lower = (value) => clean(value).toLowerCase();
+  const upper = (value) => clean(value).toUpperCase();
+  const isNoAplica = (value) => /^(no\s*aplica|n\/a|na|no)$/i.test(clean(value));
+
+  const firstNonEmpty = (...values) => {
+    for (const value of values) {
+      const text = clean(value);
+      if (text) return text;
+    }
+    return '';
+  };
+
+  const normalizeDate = (value) => {
+    const text = clean(value);
+    if (!text) return '';
+
+    // YYYY-MM-DD → DD/MM/YYYY
+    const iso = text.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (iso) return `${iso[3]}/${iso[2]}/${iso[1]}`;
+
+    // DD-MM-YYYY → DD/MM/YYYY
+    const dashed = text.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/);
+    if (dashed) {
+      return `${dashed[1].padStart(2, '0')}/${dashed[2].padStart(2, '0')}/${dashed[3]}`;
+    }
+
+    return text;
+  };
+
+  const tipoContrato = upper(firstNonEmpty(d.tipoContrato, d.contrato, d.modalidadContrato));
+
+  const accesosRaw = Array.isArray(d.tipoAcceso)
+    ? d.tipoAcceso
+    : [firstNonEmpty(d.tipoAcceso, d.accesoSolicitado, d.servicioSolicitado, 'remoto')];
+  const accesos = accesosRaw.map((item) => lower(item));
+  const joinedAccesos = accesos.join(' ');
+
+  const wantsRemoto =
+    joinedAccesos.includes('remoto') ||
+    joinedAccesos.includes('vpn') ||
+    joinedAccesos.includes('forticlient') ||
+    joinedAccesos.includes('ambos');
+
+  const wantsUSB =
+    joinedAccesos.includes('usb') ||
+    joinedAccesos.includes('puerto') ||
+    joinedAccesos.includes('medio removible') ||
+    joinedAccesos.includes('ambos');
+
+  const fechaSolicitud = normalizeDate(
+    firstNonEmpty(d.fechaSolicitud, new Date().toLocaleDateString('es-PE'))
+  );
+
+  const fechaInicioContrato = normalizeDate(
+    firstNonEmpty(d.fechaInicioContrato, d.fechaInicio, d.inicioContrato)
+  );
+  const fechaTerminoContrato = normalizeDate(
+    firstNonEmpty(d.fechaTerminoContrato, d.fechaTermino, d.finContrato, d.terminoContrato)
+  );
+
+  const fechaInicioAcceso = normalizeDate(
+    firstNonEmpty(d.fechaInicioAcceso, d.fechaInicioPermiso, d.fechaInicioVPN, fechaInicioContrato)
+  );
+  const fechaTerminoAcceso = normalizeDate(
+    firstNonEmpty(d.fechaTerminoAcceso, d.fechaFinAcceso, d.fechaTerminoPermiso, d.fechaTerminoVPN, fechaTerminoContrato)
+  );
+
+  const numeroOS = firstNonEmpty(d.numeroOS, d.ordenServicio, d.numeroOrdenServicio);
+
+  // ANEXO 01 principal: el campo "Correo electrónico" corresponde al correo
+  // institucional si el usuario lo proporciona. Para VPN, el correo personal se
+  // usa en el cuadro "VPN con doble autenticación".
+  const correoInstitucional = firstNonEmpty(
+    d.correoInstitucional,
+    d.emailInstitucional,
+    d.correoINEI,
+    d.correoInEi
+  );
+
+  const correoPersonal = firstNonEmpty(
+    d.correoPersonal,
+    d.emailPersonal,
+    d.correoDobleAutenticacion,
+    d.correoVPN,
+    // Compatibilidad: si el modelo envía d.correo con un correo no institucional,
+    // usarlo solo para el formato VPN, no para el campo institucional del Anexo 01.
+    /@inei\.gob\.pe$/i.test(clean(d.correo)) ? '' : d.correo
+  );
+
+  const usuarioRed = firstNonEmpty(
+    d.usuarioRed,
+    d.userRed,
+    d.usuarioRedINEI,
+    d.usuarioINEI,
+    d.usuario,
+    d.cuentaRed
+  );
+
+  const hostEquipo = firstNonEmpty(
+    d.hostEquipo,
+    d.host,
+    d.nombreEquipo,
+    d.nombreHost,
+    d.equipoHost
+  );
+
+  const data = {
+    // Datos del usuario / trabajador
+    nombres: firstNonEmpty(d.nombres, d.nombreCompleto, d.nombresApellidos),
+    dni: firstNonEmpty(d.dni, d.documentoIdentidad, d.documento),
+    cargo: firstNonEmpty(d.cargo, d.funcion, d.cargoFuncion),
+    oficina: firstNonEmpty(d.oficina, d.direccion, d.direccionOficina, d.area, d.dependencia),
+    correo: correoInstitucional,
+    telefono: firstNonEmpty(d.telefono, d.anexo, d.celular, d.telefonoContacto),
+    sede: firstNonEmpty(d.sede, d.local),
+
+    // Fechas y OS
+    fechaSolicitud,
+    fechaInicioContrato,
+    fechaTerminoContrato,
+    fechaInicioAcceso,
+    fechaTerminoAcceso,
+    numeroOS: isNoAplica(numeroOS) ? '' : numeroOS,
+
+    // Checkboxes de contrato
+    ckNombrado: tipoContrato.includes('NOMBRADO') ? 'X' : '',
+    ckCAS: tipoContrato.includes('CAS') ? 'X' : '',
+    ckLocador:
+      tipoContrato.includes('LOCADOR') ||
+      tipoContrato.includes('LOCACION') ||
+      tipoContrato.includes('LOCACIÓN') ||
+      tipoContrato.includes('O.S') ||
+      tipoContrato.includes('OS')
+        ? 'X'
+        : '',
+    ckOtros: tipoContrato.includes('OTRO') ? 'X' : '',
+
+    // Checkboxes de acceso
+    ckAccesoRemoto: wantsRemoto ? 'X' : '',
+    ckUSB: wantsUSB ? 'X' : '',
+
+    // Justificaciones y firmantes
+    justificacionRemoto: firstNonEmpty(d.justificacionRemoto, d.justificacionAccesoRemoto, wantsRemoto ? d.justificacion : ''),
+    justificacionUSB: firstNonEmpty(d.justificacionUSB, d.justificacionDesbloqueoUSB, wantsUSB ? d.justificacion : ''),
+    nombresSolicitante: firstNonEmpty(d.nombresSolicitante, d.solicitante, d.nombres, d.nombreCompleto),
+    nombreDirector: firstNonEmpty(d.nombreDirector, d.director, d.funcionarioAutorizado, d.jefeArea),
+
+    // Formato VPN adicional incluido en la plantilla oficial
+    usuarioRed,
+    ipOpcional: firstNonEmpty(d.ipOpcional, d.ip, d.ipEquipo),
+    correoPersonal,
+    hostEquipo,
+  };
+
+  try {
+    doc.render(data);
+  } catch (err) {
+    const detail = err.properties?.errors
+      ?.map((e) => e.properties?.explanation || e.message)
+      .join(' | ');
+    throw new Error(`Error al renderizar ANEXO 01: ${detail || err.message}`);
+  }
+
+  return doc.getZip().generate({
+    type: 'nodebuffer',
+    compression: 'DEFLATE',
+  });
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
