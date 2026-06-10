@@ -490,7 +490,6 @@ async function generateAnexo02(d = {}) {
 
   return renderTemplate([
     'ANEXO02_individual_template.docx',
-    'ANEXO02_template.docx',
     'ANEXO02_individual_template_corregido.docx',
   ], mapAnexo02Individual(d));
 }
