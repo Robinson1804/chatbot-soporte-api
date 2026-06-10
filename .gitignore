@@ -14,6 +14,24 @@ test-*.png
 test_*.docx
 test_out.pdf
 test-results/
+run-*.png
+debug-*.png
+debug-cat-*.png
+
+# Archivos generados de prueba (ANEXO02)
+ANEXO02_*.docx
+*.tmp
+/tmp/
 
 # Logs
 *.log
+
+# SSI automation artifacts (sesion, debug screenshots)
+.ssi-session.json
+.ssi-*.png
+
+# Screenshots y artefactos de pruebas
+tests/screenshots/
+
+# Logs del servidor
+server-startup.log

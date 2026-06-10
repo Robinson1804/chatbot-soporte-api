@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>OTIN Chatbot — Dashboard Admin</title>
+  <link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="/admin.css">
+</head>
+<body class="admin-body">
+  <header class="admin-header">
+    <h1>Dashboard Mesa de Ayuda OTIN/INEI</h1>
+    <span class="admin-updated">Actualizado: <time id="lastUpdate">--</time></span>
+  </header>
+
+  <div id="errorBanner" class="admin-error" hidden></div>
+
+  <main class="admin-grid">
+    <!-- KPI: promedio mensajes -->
+    <section class="card kpi-card">
+      <h2>Promedio mensajes/sesión</h2>
+      <div id="kpiPromedio" class="kpi-value">--</div>
+      <small id="kpiPromedioSub"></small>
+    </section>
+
+    <!-- KPI: tasa exito tickets -->
+    <section class="card kpi-card">
+      <h2>Tasa éxito tickets SSI</h2>
+      <div id="kpiTickets" class="kpi-value">--%</div>
+      <small id="kpiTicketsSub"></small>
+    </section>
+
+    <!-- Chart: sesiones por dia (7d) -->
+    <section class="card chart-card">
+      <h2>Sesiones por día (7d)</h2>
+      <canvas id="chartSesionesDia"></canvas>
+    </section>
+
+    <!-- Chart: mensajes por hora -->
+    <section class="card chart-card">
+      <h2>Mensajes por hora (7d)</h2>
+      <canvas id="chartHorasPico"></canvas>
+    </section>
+
+    <!-- Chart: documentos por tipo -->
+    <section class="card chart-card">
+      <h2>Documentos por tipo (30d)</h2>
+      <canvas id="chartDocsTipo"></canvas>
+    </section>
+
+    <!-- Chart: urgencias -->
+    <section class="card chart-card">
+      <h2>Urgencias P1–P4 (30d)</h2>
+      <canvas id="chartUrgencias"></canvas>
+    </section>
+
+    <!-- Chart: tickets SSI doughnut -->
+    <section class="card chart-card">
+      <h2>Tickets SSI: creados vs fallidos</h2>
+      <canvas id="chartTicketsSSI"></canvas>
+    </section>
+
+    <!-- KPIs escalares: volumen de sesiones -->
+    <section class="card kpi-card">
+      <h2>Sesiones — hoy</h2>
+      <div id="kpi-sesiones-hoy" class="kpi-value">--</div>
+    </section>
+
+    <section class="card kpi-card">
+      <h2>Sesiones — últimos 7 días</h2>
+      <div id="kpi-sesiones-7d" class="kpi-value">--</div>
+    </section>
+
+    <section class="card kpi-card">
+      <h2>Sesiones — últimos 30 días</h2>
+      <div id="kpi-sesiones-30d" class="kpi-value">--</div>
+    </section>
+
+    <!-- Chart: documentos por día (30d) -->
+    <section class="card chart-card">
+      <h2>Documentos generados por día (30d)</h2>
+      <canvas id="chartDocsPorDia"></canvas>
+    </section>
+
+    <!-- Tabla: tickets SSI por categoría -->
+    <section class="card">
+      <h2>Tickets SSI por categoría</h2>
+      <table id="tablaTicketsCategoria" class="admin-table">
+        <thead><tr><th>Categoría</th><th>Total</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </section>
+
+    <!-- Tabla: tickets SSI por sede -->
+    <section class="card">
+      <h2>Tickets SSI por sede</h2>
+      <table id="tablaTicketsSede" class="admin-table">
+        <thead><tr><th>Sede</th><th>Total</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </section>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="/admin.js"></script>
+</body>
+</html>
